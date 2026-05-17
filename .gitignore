@@ -41,7 +41,14 @@ mobile/.packages
 .DS_Store
 Thumbs.db
 
-# Demo artifacts
-demo/*.mp4
-demo/*.mov
-demo/*.png
+demo/
+
+# Backend runtime output (generated, not source).
+# Source data lives under backend/app/data/ and IS versioned.
+backend/runtime/
+
+# Ad-hoc audit / debug outputs occasionally written to backend/ root
+backend/audit-*.md
+backend/got-receipt*
+backend/*.tmp
+backend/scratch/

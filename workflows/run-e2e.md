@@ -13,9 +13,9 @@
 
 1. Ensures the DB is freshly seeded (calls `/seed-mock` if needed).
 2. Runs `pytest` with the `tests/` directory.
-3. For each test, captures the agent trace and writes it to `backend/data/traces/<test_name>.md`.
+3. For each test, captures the agent trace and writes it to `backend/runtime/traces/<test_name>.md`.
 4. Asserts the **happy-path acceptance criteria** (below) and the **conflict-recovery criteria**.
-5. Exports a single combined `backend/data/traces/e2e-report.md` summarising pass/fail per test.
+5. Exports a single combined `backend/runtime/traces/e2e-report.md` summarising pass/fail per test.
 
 ## Test matrix
 
@@ -47,11 +47,11 @@
 
 2. **Run tests**:
    ```bash
-   uv run pytest -v --tb=short
+   uv run python -m pytest -v --tb=short
    ```
 
 3. **Collect traces**:
-   Each test fixture writes its trace to `backend/data/traces/<test_name>.md`. The aggregator at the end of the test run combines them into `e2e-report.md`.
+   Each test fixture writes its trace to `backend/runtime/traces/<test_name>.md`. The aggregator at the end of the test run combines them into `e2e-report.md`.
 
 4. **Print summary**:
    ```
@@ -70,7 +70,7 @@
      test_resolution_attempts_cap   2.10 s
 
    Total: 8 / 8 PASS in 7.88 s
-   Traces written to: backend/data/traces/
+   Traces written to: backend/runtime/traces/
    ```
 
 ## Demo time-scale mode
@@ -89,6 +89,6 @@ For tests that exercise the scheduler, set `DEMO_TIME_SCALE=600` (1 real-second 
 ## Acceptance criteria
 
 - All 8 tests pass.
-- `backend/data/traces/e2e-report.md` exists and shows `8 / 8 PASS`.
+- `backend/runtime/traces/e2e-report.md` exists and shows `8 / 8 PASS`.
 - Each individual trace file contains at least one event per agent that participated.
 - The conflict tests' traces include at least one `recover`-phase event.

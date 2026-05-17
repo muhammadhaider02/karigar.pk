@@ -11,11 +11,11 @@
 
 ## What it does
 
-1. Wipes any existing `backend/data/karigar.db`.
+1. Wipes any existing `backend/runtime/karigar.db` (runtime DB; `backend/app/data/providers.json` is source data and is NOT touched).
 2. Calls `seed.py` to:
-   - Write/overwrite `backend/app/data/providers.json` with 25 hand-tuned providers.
+   - Read the 25 hand-tuned providers from `backend/app/data/providers.json` (source).
    - Create all tables defined in `backend/app/db/models.py`.
-   - Insert each provider into the `providers` table.
+   - Insert each provider into the `providers` table in `backend/runtime/karigar.db`.
    - Print a verification summary (count per category, count per sector).
 3. Verifies that the canonical demo query (`G-13` + `AC technician` + tomorrow morning) returns **Ali AC Services** as the top candidate.
 
@@ -27,9 +27,9 @@
    uv --version
    ```
 
-2. **Reset DB**:
+2. **Reset runtime DB**:
    ```bash
-   rm -f data/karigar.db
+   rm -f runtime/karigar.db
    ```
 
 3. **Run the seed script**:
@@ -37,20 +37,23 @@
    uv run python -m app.data.seed
    ```
 
-4. **Verify**:
+4. **Verify** (the seed script runs `verify_canonical()` at the end of `main()`,
+   but you can also re-run it standalone; note it is `async`, so wrap it in
+   `asyncio.run` if calling from a one-liner):
    ```bash
-   uv run python -c "from app.data.seed import verify_canonical; verify_canonical()"
+   uv run python -c "import asyncio; from app.data.seed import verify_canonical; asyncio.run(verify_canonical())"
    ```
    Expected output:
    ```
-   ✓ 25 providers loaded
-   ✓ 6 categories represented
-   ✓ Canonical query 'G-13 + AC technician + tomorrow morning' -> top match: Ali AC Services
+   [OK] 25 providers loaded into SQLite
+   [OK] Seed report written to runtime/seed-report.md
+   [OK] Canonical query G-13 + AC technician + tomorrow morning -> top match: Ali AC Services
+   [OK] 6 categories represented
    ```
 
 ## Output artifact
 
-A short markdown report at `backend/data/seed-report.md` listing:
+A short markdown report at `backend/runtime/seed-report.md` listing:
 - Provider count per category
 - Provider count per sector
 - The top-3 results for each canonical demo query (used by `demo/script.md`)
@@ -66,6 +69,6 @@ A short markdown report at `backend/data/seed-report.md` listing:
 
 ## Acceptance criteria
 
-- `backend/data/karigar.db` exists and contains exactly 25 providers.
+- `backend/runtime/karigar.db` exists and contains exactly 25 providers.
 - `verify_canonical()` prints all 3 checkmarks.
-- `seed-report.md` was rewritten with the current timestamp.
+- `runtime/seed-report.md` was rewritten with the current timestamp.

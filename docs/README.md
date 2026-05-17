@@ -36,7 +36,7 @@ cp .env.example .env
 cd backend
 uv sync                                      # install deps from pyproject.toml + uv.lock
 uv run python -m app.data.seed               # seed providers.json + SQLite
-uv run uvicorn app.main:app --reload         # boots on http://localhost:8000
+uv run python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Health check:
@@ -70,7 +70,7 @@ The Flutter app expects the backend at `http://10.0.2.2:8000` on Android emulato
 
 ```bash
 cd backend
-uv run pytest -v
+uv run python -m pytest -v
 ```
 
 Or use the Antigravity workflow: `/run-e2e`.
@@ -183,9 +183,11 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 ## 4. APIs and tools used
 
 ### LLM
-- **Google Gemini 2.5 Flash**: default for IntentAgent and Search summarisation
-- **Google Gemini 2.5 Pro**: DecisionAgent and ConflictResolverAgent
+- **Google Gemini 2.5 Flash**: all nodes (IntentAgent, DecisionAgent, ConflictResolverAgent, Search summarisation)
 - Accessed via `langchain-google-genai` with structured output (Pydantic schema)
+- **`DEMO_MODE=true`** activates a cache in `backend/app/graph/demo_cache.py` that returns
+  deterministic responses for the 5 canonical demo prompts (Intent + Decision + Conflict)
+  without burning Gemini quota. Unknown prompts still fall through to the live API.
 
 ### Agent orchestration
 - **LangGraph 1.x**: state machine, conditional routing, subgraph re-invocation
@@ -215,13 +217,18 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 ## 5. Assumptions and limitations
 
 - **Provider data is fully synthetic**: 25 mock providers across Islamabad. No real businesses are listed.
-- **All phone numbers and addresses are placeholders** (`0300-XXX-XXXX`, sector-level addresses). PII-free per brief requirement: *"Avoid use of real personal/sensitive data."*
+- **All phone numbers and addresses are placeholders**: numbers follow the realistic Pakistani
+  `03XX-XXXXXXX` shape but are randomly generated with a fixed seed (any resemblance to
+  real numbers is incidental). Addresses are sector-level only. PII-free per brief
+  requirement: *"Avoid use of real personal/sensitive data."*
 - **WhatsApp confirmations are simulated** inside the app on a faux-WhatsApp screen. No real WhatsApp Business API integration.
 - **Follow-up timing is compressed** via the `DEMO_TIME_SCALE` env var for live demonstration. In production, `DEMO_TIME_SCALE=1` for real-time scheduling.
 - **Urdu speech-to-text accuracy** depends on device locale. We ship text input as the primary input method and voice as a bonus.
 - **No payments handled**: bookings include a price estimate only.
 - **Conflict resolution is capped at 3 auto-rebook attempts** before handing off to the user with the top-3 alternatives. This prevents infinite loops on correlated failures.
 - **Google Maps APIs are optional**: the system fully functions on mock data without any API key. Real APIs are a drop-in via env var, demonstrating clean architecture (rubric criterion 5).
-- **Gemini API quota** during the demo is mitigated via a `DEMO_MODE` cache that stores 5 canonical input → response pairs deterministically.
+- **Gemini API quota** during the demo is mitigated via a `DEMO_MODE` cache (see
+  `backend/app/graph/demo_cache.py`) that returns deterministic responses for the 5
+  canonical demo prompts; unknown prompts still fall through to the live LLM.
 - **No user authentication**: onboarding accepts a display name only. A production version would require phone-OTP auth.
 - **Single-region**: sector lookup tables are Islamabad-only. Extending to Lahore, Karachi etc. is purely a data exercise.

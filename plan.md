@@ -47,7 +47,7 @@ flowchart TB
     Provider[Provider webhook] -.->|"unavailable / no-show"| Bus
 
     subgraph Conflict [Conflict-resolution subgraph - reactive]
-        Resolver[7 Conflict Resolver Agent<br/>Gemini Pro + policy rules]
+        Resolver[7 Conflict Resolver Agent<br/>Gemini Flash + policy rules]
         Resolver -->|"re-invoke with filters"| Discovery2[Discovery]
         Discovery2 --> Ranking2[Ranking] --> Decision2[Decision] --> Rebook[Booking re-run]
     end
@@ -95,13 +95,13 @@ booking, trace[], excluded_provider_ids[], resolution_attempts (max 3)
 | - | **Planning step** (Orchestrator, not a separate agent) | - | Emits a single `Plan` trace event with the literal 5 upcoming steps. Makes the brief-required *planning* phase visible. |
 | 2 | **DiscoveryAgent** | (no LLM) | Calls `Geocoder.resolve` then `ProviderStore.search(exclude=excluded_provider_ids)`. May call `Search.lookup` (Antigravity Browser subagent) for reputation enrichment. |
 | 3 | **RankingAgent** | (no LLM) | Pure-function scorer: `score = 0.4*proximity + 0.3*rating + 0.2*availability_fit + 0.1*price_fit`. Emits human-readable reasoning per candidate. |
-| 4 | **DecisionAgent** | Gemini 2.5 Pro | Picks top-1 (or top-3 if uncertain) and writes a 1-sentence justification **in the user's language**. |
+| 4 | **DecisionAgent** | Gemini 2.5 Flash | Picks top-1 (or top-3 if uncertain) and writes a 1-sentence justification **in the user's language**. |
 | 5 | **BookingAgent** | (no LLM) | Atomic `Availability.check_and_hold` → `Bookings.create` → receipt → `Notifier.send`. Raises `SlotConflict` on race → routes to Conflict Resolver. |
 | 6 | **FollowupAgent** | (no LLM) | Schedules `reminder_T-1h`, `noshow_watchdog_T+15min`, `status_check_T+0`, `completion_request_T+2h`. |
 
 ### Reactive agent
 
-**7. ConflictResolverAgent** (Gemini 2.5 Pro + policy rules): **not** part of the user-initiated graph. Subscribes to the event bus and activates on any of:
+**7. ConflictResolverAgent** (Gemini 2.5 Flash + policy rules): **not** part of the user-initiated graph. Subscribes to the event bus and activates on any of:
 - `no_show_detected` (from `noshow_watchdog_T+15min`)
 - `user_cancellation` (Flutter cancel button → `POST /bookings/{id}/cancel`)
 - `provider_unavailable` (mock provider webhook `POST /providers/{id}/unavailable`)
@@ -132,7 +132,7 @@ Every node calls `trace.append(...)` with this shape, which explicitly separates
 
 - **Mobile**: Flutter 3.x — `dio`, `flutter_sse`, `speech_to_text` (ur-PK locale), `flutter_tts`, `flutter_local_notifications`, `google_maps_flutter` (optional), `riverpod`.
 - **Backend**: Python 3.11 (managed by `uv`), FastAPI, LangGraph, `langchain-google-genai`, Pydantic v2, SQLAlchemy + SQLite (aiosqlite), APScheduler and `sse-starlette`.
-- **LLM**: Gemini 2.5 Flash (default) + Gemini 2.5 Pro (Decision + Conflict Resolver).
+- **LLM**: Gemini 2.5 Flash (all nodes).
 - **Tools**: Maps (mock + real Google Geocoding/Places/Distance Matrix behind `GOOGLE_MAPS_KEY`), **Search via Antigravity Browser subagent** and mock Notifier.
 - **Dev + runtime platform**: Google Antigravity (Agent Manager (dev orchestration), Browser subagent (runtime Search + demo recorder) and Artifacts (deliverables)).
 
@@ -183,7 +183,7 @@ Every node calls `trace.append(...)` with this shape, which explicitly separates
       bookings.py
       notifier.py
       search.py           # Antigravity Browser subagent wrapper
-    data/
+    data/                 # SOURCE data (versioned, immutable, importable)
       providers.json      # 25 PII-safe mock providers
       seed.py
     db/
@@ -195,6 +195,12 @@ Every node calls `trace.append(...)` with this shape, which explicitly separates
                           # POST /providers/{id}/unavailable
     scheduler/
       reminders.py
+  runtime/                # RUNTIME output (gitignored, regenerated)
+    karigar.db            # SQLite (created at boot)
+    notifier-log.jsonl    # mock WhatsApp log
+    receipts/<id>.png     # generated PNG receipts
+    seed-report.md        # written by /seed-mock
+    traces/<test>.md      # written by /run-e2e
   tests/
     test_happy_path.py
     test_conflict.py
@@ -224,11 +230,21 @@ id, name, services[], lat, lng, rating (3.5-4.9),
 price_per_visit, phone, working_hours, busy_slots[]
 ```
 
+`services[]` values are stored as lower_snake_case identifiers (`"ac_technician"`,
+`"plumber"`, …) — these are machine-readable enum values used for matching, DB
+queries and trace events. The user-facing form (`"AC Technician"`, `"Plumber"`)
+is produced by `ServiceType.pretty_name` and used on the receipt, in the
+faux-WhatsApp message and in the trace UI; the JSON values themselves are
+never shown to the user.
+
 The dataset is hand-tuned so the canonical query *"G-13 + AC technician + tomorrow morning"* deterministically returns **"Ali AC Services"**, matching the brief's example output exactly.
 
 **PII compliance** (brief requirement: *"Avoid use of real personal/sensitive data"*):
 - All names are clearly fictional (Ali AC Services, Hassan Cooling Experts, etc.).
-- All phone numbers use the documentation-safe pattern `0300-XXX-XXXX` with placeholder digits.
+- All phone numbers follow the realistic Pakistani `03XX-XXXXXXX` shape but are
+  generated by a fixed-seed random script (see git history for the regenerator).
+  Any collision with a real number is incidental; the businesses themselves are
+  fictional.
 - All addresses are sector-level only (no street numbers).
 - No real user data is collected; onboarding accepts a display name only, no auth.
 
@@ -283,7 +299,8 @@ Five scenarios are wired end-to-end, all observable in the live trace:
 ## 10c. Assumptions and Limitations (verbatim README section)
 
 - Provider data is fully synthetic (25 mock providers); no real businesses are listed.
-- All phone numbers / addresses are placeholders; PII-free per brief.
+- All phone numbers follow Pakistani `03XX-XXXXXXX` format but are randomly generated
+  with a fixed seed; addresses are sector-level placeholders. PII-free per brief.
 - WhatsApp confirmations are simulated inside the app (faux-WhatsApp screen); no real WhatsApp Business API integration.
 - Follow-up timing is compressed via `DEMO_TIME_SCALE` for live demonstration; production would use real-time scheduling.
 - Urdu speech-to-text accuracy depends on device locale; text input is the primary, voice the bonus.

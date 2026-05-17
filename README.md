@@ -42,7 +42,7 @@ Karigar understands. Plans. Searches. Ranks. Decides. Books. Follows up. And if 
 
 - **Mobile**: Flutter 3.x
 - **Backend**: Python 3.11, FastAPI, LangGraph, SQLite, APScheduler (managed with [`uv`](https://docs.astral.sh/uv/))
-- **LLM**: Gemini 2.5 Flash + Pro via Google AI Studio
+- **LLM**: Gemini 2.5 Flash via Google AI Studio
 - **Build platform**: [Google Antigravity](https://antigravity.google/)
 
 ## License

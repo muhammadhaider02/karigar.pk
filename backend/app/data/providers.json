@@ -1,0 +1,432 @@
+[
+  {
+    "id": "provider_01",
+    "name": "Ali AC Services",
+    "services": [
+      "ac_technician"
+    ],
+    "lat": 33.6515,
+    "lng": 72.9395,
+    "rating": 4.7,
+    "price_per_visit": 1500,
+    "phone": "0335-0895332",
+    "working_hours": {
+      "start": "08:00",
+      "end": "20:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_02",
+    "name": "Hassan Cooling Experts",
+    "services": [
+      "ac_technician"
+    ],
+    "lat": 33.648,
+    "lng": 72.942,
+    "rating": 4.5,
+    "price_per_visit": 1600,
+    "phone": "0324-4079000",
+    "working_hours": {
+      "start": "09:00",
+      "end": "19:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_03",
+    "name": "Karim Cool Air",
+    "services": [
+      "ac_technician"
+    ],
+    "lat": 33.655,
+    "lng": 72.936,
+    "rating": 4.2,
+    "price_per_visit": 1200,
+    "phone": "0332-0970277",
+    "working_hours": {
+      "start": "08:00",
+      "end": "18:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_04",
+    "name": "Raza Climate Control",
+    "services": [
+      "ac_technician"
+    ],
+    "lat": 33.72,
+    "lng": 73.04,
+    "rating": 4.0,
+    "price_per_visit": 1400,
+    "phone": "0325-9395522",
+    "working_hours": {
+      "start": "09:00",
+      "end": "21:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_05",
+    "name": "Akhtar HVAC Solutions",
+    "services": [
+      "ac_technician"
+    ],
+    "lat": 33.705,
+    "lng": 73.01,
+    "rating": 3.8,
+    "price_per_visit": 1100,
+    "phone": "0302-1190574",
+    "working_hours": {
+      "start": "08:00",
+      "end": "17:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_06",
+    "name": "Tariq Plumbing Works",
+    "services": [
+      "plumber"
+    ],
+    "lat": 33.651,
+    "lng": 72.941,
+    "rating": 4.6,
+    "price_per_visit": 800,
+    "phone": "0336-1755730",
+    "working_hours": {
+      "start": "07:00",
+      "end": "21:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_07",
+    "name": "Shahid Pipe Fix",
+    "services": [
+      "plumber"
+    ],
+    "lat": 33.721,
+    "lng": 73.051,
+    "rating": 4.3,
+    "price_per_visit": 700,
+    "phone": "0348-5657883",
+    "working_hours": {
+      "start": "08:00",
+      "end": "20:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_08",
+    "name": "Nadeem Water Solutions",
+    "services": [
+      "plumber"
+    ],
+    "lat": 33.708,
+    "lng": 73.015,
+    "rating": 3.9,
+    "price_per_visit": 650,
+    "phone": "0334-5389201",
+    "working_hours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_09",
+    "name": "Usman Electric Co",
+    "services": [
+      "electrician"
+    ],
+    "lat": 33.718,
+    "lng": 73.048,
+    "rating": 4.8,
+    "price_per_visit": 1000,
+    "phone": "0317-5580995",
+    "working_hours": {
+      "start": "08:00",
+      "end": "20:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_10",
+    "name": "Bilal Power Services",
+    "services": [
+      "electrician"
+    ],
+    "lat": 33.652,
+    "lng": 72.938,
+    "rating": 4.4,
+    "price_per_visit": 900,
+    "phone": "0337-5553325",
+    "working_hours": {
+      "start": "09:00",
+      "end": "19:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_11",
+    "name": "Khalid Wiring Experts",
+    "services": [
+      "electrician"
+    ],
+    "lat": 33.699,
+    "lng": 73.068,
+    "rating": 4.1,
+    "price_per_visit": 850,
+    "phone": "0332-8402268",
+    "working_hours": {
+      "start": "08:00",
+      "end": "18:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_12",
+    "name": "Sana Home Tutor",
+    "services": [
+      "tutor"
+    ],
+    "lat": 33.723,
+    "lng": 73.052,
+    "rating": 4.9,
+    "price_per_visit": 1200,
+    "phone": "0349-1504998",
+    "working_hours": {
+      "start": "09:00",
+      "end": "20:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_13",
+    "name": "Ahmed Math Tutor",
+    "services": [
+      "tutor"
+    ],
+    "lat": 33.719,
+    "lng": 73.045,
+    "rating": 4.6,
+    "price_per_visit": 1000,
+    "phone": "0315-7291671",
+    "working_hours": {
+      "start": "10:00",
+      "end": "21:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_14",
+    "name": "Fatima Academy",
+    "services": [
+      "tutor"
+    ],
+    "lat": 33.654,
+    "lng": 72.937,
+    "rating": 4.3,
+    "price_per_visit": 900,
+    "phone": "0314-6419163",
+    "working_hours": {
+      "start": "09:00",
+      "end": "19:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_15",
+    "name": "Zara Beauty Studio",
+    "services": [
+      "beautician"
+    ],
+    "lat": 33.722,
+    "lng": 73.049,
+    "rating": 4.7,
+    "price_per_visit": 2000,
+    "phone": "0346-8652837",
+    "working_hours": {
+      "start": "10:00",
+      "end": "20:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_16",
+    "name": "Nadia Home Beauty",
+    "services": [
+      "beautician"
+    ],
+    "lat": 33.65,
+    "lng": 72.94,
+    "rating": 4.4,
+    "price_per_visit": 1800,
+    "phone": "0333-3539917",
+    "working_hours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_17",
+    "name": "Rubina Salon Services",
+    "services": [
+      "beautician"
+    ],
+    "lat": 33.7,
+    "lng": 73.07,
+    "rating": 4.0,
+    "price_per_visit": 1500,
+    "phone": "0329-6643799",
+    "working_hours": {
+      "start": "11:00",
+      "end": "21:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_18",
+    "name": "Nasir Carpentry Works",
+    "services": [
+      "carpenter"
+    ],
+    "lat": 33.716,
+    "lng": 73.044,
+    "rating": 4.5,
+    "price_per_visit": 1300,
+    "phone": "0338-1837415",
+    "working_hours": {
+      "start": "08:00",
+      "end": "19:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_19",
+    "name": "Amjad Wood Craft",
+    "services": [
+      "carpenter"
+    ],
+    "lat": 33.649,
+    "lng": 72.943,
+    "rating": 4.2,
+    "price_per_visit": 1100,
+    "phone": "0304-1286805",
+    "working_hours": {
+      "start": "07:00",
+      "end": "18:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_20",
+    "name": "Iqbal Furniture Fix",
+    "services": [
+      "carpenter"
+    ],
+    "lat": 33.698,
+    "lng": 73.065,
+    "rating": 3.7,
+    "price_per_visit": 950,
+    "phone": "0344-5972226",
+    "working_hours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_21",
+    "name": "Faisal Multi Services",
+    "services": [
+      "plumber",
+      "electrician"
+    ],
+    "lat": 33.698,
+    "lng": 73.06,
+    "rating": 4.3,
+    "price_per_visit": 900,
+    "phone": "0342-3572239",
+    "working_hours": {
+      "start": "08:00",
+      "end": "20:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_22",
+    "name": "Babar Home Technician",
+    "services": [
+      "ac_technician",
+      "electrician"
+    ],
+    "lat": 33.701,
+    "lng": 73.072,
+    "rating": 4.1,
+    "price_per_visit": 1300,
+    "phone": "0329-6663779",
+    "working_hours": {
+      "start": "09:00",
+      "end": "19:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_23",
+    "name": "Waseem AC & Plumbing",
+    "services": [
+      "ac_technician",
+      "plumber"
+    ],
+    "lat": 33.696,
+    "lng": 73.058,
+    "rating": 3.9,
+    "price_per_visit": 1200,
+    "phone": "0337-4186883",
+    "working_hours": {
+      "start": "08:00",
+      "end": "18:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_24",
+    "name": "Arif All-in-One Services",
+    "services": [
+      "plumber",
+      "carpenter"
+    ],
+    "lat": 33.725,
+    "lng": 73.053,
+    "rating": 4.0,
+    "price_per_visit": 1000,
+    "phone": "0322-4987009",
+    "working_hours": {
+      "start": "09:00",
+      "end": "21:00"
+    },
+    "busy_slots": []
+  },
+  {
+    "id": "provider_25",
+    "name": "Jamil Express Repair",
+    "services": [
+      "electrician",
+      "carpenter"
+    ],
+    "lat": 33.697,
+    "lng": 73.063,
+    "rating": 3.6,
+    "price_per_visit": 850,
+    "phone": "0333-4582337",
+    "working_hours": {
+      "start": "07:00",
+      "end": "17:00"
+    },
+    "busy_slots": []
+  }
+]

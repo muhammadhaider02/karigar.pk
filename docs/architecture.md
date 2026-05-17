@@ -75,10 +75,31 @@ class RequestSession(BaseModel):
     resolution_attempts: int = 0
     triggered_by: Optional[str] = None               # e.g. "no_show_detected:provider_42"
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Snapshot of the user's original window at first conflict so the resolver
+    # widens *relative to it* (rather than cumulatively widening the already-
+    # widened window each retry).
+    original_time_window: Optional[TimeWindow] = None
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(ZoneInfo("Asia/Karachi")))
 ```
 
 Persistence: sessions are kept in-memory during a single graph run. After completion, the trace is durable in the `agent_traces` table; the session itself is discarded. The Conflict Resolver reconstructs the session from `agent_traces` + `bookings` + `conflict_events` when an event fires.
+
+## 2a. Repository layout: `app/data/` vs `runtime/`
+
+The backend has two folders that look similar but serve completely different
+purposes. The split is deliberate and load-bearing:
+
+| Path | Purpose | Versioned? | Touched by |
+|---|---|---|---|
+| `backend/app/data/` | **Source data** that ships with the app: `providers.json` (the 25 seed providers), `seed.py` (the seeder script). Importable as a Python package. | YES | Edited by devs; read by `JsonProviderStore` and `seed.py` |
+| `backend/runtime/` | **Runtime output** generated at boot/runtime: `karigar.db` (SQLite), `notifier-log.jsonl` (mock WhatsApp messages), `receipts/*.png`, `seed-report.md`, `traces/*.md` (e2e exports). | **NO** (gitignored in `.gitignore`) | Written by the backend at runtime; safe to delete |
+
+`backend/runtime/` is wiped by the `/seed-mock` workflow and is regenerated
+on every fresh run. If you ever see code referencing `data/karigar.db`
+(without the `runtime/` prefix) it's a bug — older versions of the project
+used a single `backend/data/` folder for both source and runtime, which was
+confusing.
 
 ## 3. Tool protocols (swappable)
 
@@ -115,10 +136,10 @@ class Search(Protocol):
 | Protocol | Mock | Real |
 |---|---|---|
 | Geocoder | `MockGeocoder`: Islamabad sector lookup table | `GoogleGeocoder`: Geocoding API |
-| ProviderStore | `JsonProviderStore`: reads `data/providers.json` | `GooglePlacesStore`: Places Nearby Search |
+| ProviderStore | `JsonProviderStore`: reads `app/data/providers.json` (source data, versioned) | `GooglePlacesStore`: Places Nearby Search |
 | Distance | `HaversineDistance` | `GoogleDistanceMatrix` |
-| Availability | `SqliteAvailability` (the only impl: uses DB) | (same) |
-| Notifier | `MockNotifier`: appends to `data/notifier-log.jsonl` and exposes `GET /notifier-log` for the Flutter app | (no real backend; WhatsApp Business API would replace this) |
+| Availability | `SqliteAvailability` (the only impl: uses DB at `runtime/karigar.db`) | (same) |
+| Notifier | `MockNotifier`: appends to `runtime/notifier-log.jsonl` and exposes `GET /notifier-log` for the Flutter app | (no real backend; WhatsApp Business API would replace this) |
 | Search | `AntigravityBrowserSearch` (default) | `GeminiGroundedSearch` (fallback when running outside Antigravity) |
 
 ### Selecting an implementation

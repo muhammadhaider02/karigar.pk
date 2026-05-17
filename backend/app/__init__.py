@@ -1,0 +1,1 @@
+"""Karigar backend app package."""

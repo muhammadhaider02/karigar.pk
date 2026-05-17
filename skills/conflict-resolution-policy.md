@@ -86,7 +86,7 @@ async def handle(event: ConflictEvent):
 
     async with emit_trace(state, agent="ConflictResolverAgent", phase="recover",
                            input={"event": event.key, "attempt": state.resolution_attempts}) as t:
-        # decide whether widening / exclusion is the right move (Gemini Pro)
+        # decide whether widening / exclusion is the right move (Gemini Flash)
         decision = await llm_decide_strategy(state, event)
         t.set_reasoning(decision.reasoning)
 

@@ -101,15 +101,15 @@ async def run(state: RequestSession) -> RequestSession:
 
 ## Receipt rendering
 
-`backend/app/tools/bookings.py::render_receipt` produces a PNG at `backend/data/receipts/<booking_id>.png` using PIL. Layout (text-only, no logos to keep dependencies minimal):
+`backend/app/tools/bookings.py::render_receipt` produces a PNG at `backend/runtime/receipts/<booking_id>.png` using PIL. Layout (text-only, no logos to keep dependencies minimal):
 
 ```
 KARIGAR: BOOKING CONFIRMATION
 -----------------------------------
 Booking ID:   {booking.id[:8]}
-Service:      {service_type}
+Service:      {ServiceType.pretty(booking.service_type)}   # "AC Technician", not "ac_technician"
 Provider:     {provider.name}
-Phone:        {provider.phone}        # synthetic 0300-XXX-XXXX
+Phone:        {provider.phone}        # synthetic 03XX-XXXXXXX
 Date:         {slot_start.strftime('%a, %d %b %Y')}
 Time:         {slot_start.strftime('%H:%M')} - {slot_end.strftime('%H:%M')}
 Location:     {location_hint}
