@@ -48,7 +48,7 @@ class ParsedIntent(BaseModel):
 
 1. Use `langchain-google-genai` with `model="gemini-2.5-flash"` and `with_structured_output(ParsedIntent)`. Never use free-form completions for this node.
 2. Resolve relative time phrases (*"kal subah"*, *"tonight"*, *"abhi"*) using the current server time. Always emit absolute `datetime` in `Asia/Karachi` (UTC+5).
-3. If `service_type` cannot be confidently determined, set it to `UNKNOWN` and put the raw service phrase in `notes`. Do **not** guess — the DiscoveryAgent will surface "please clarify what service you need".
+3. If `service_type` cannot be confidently determined, set it to `UNKNOWN` and put the raw service phrase in `notes`. Do **not** guess: the DiscoveryAgent will surface "please clarify what service you need".
 4. `location_hint` is intentionally a free-text string. Do **not** geocode here. The Geocoder tool does that in the next node.
 5. Always set `language` based on the **input** language, even if the user mixes (e.g. Urdu script with English words → still `URDU`).
 

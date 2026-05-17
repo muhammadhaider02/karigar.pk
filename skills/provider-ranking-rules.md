@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Deterministically rank candidate providers so the same query always returns the same ordering. Pure function — no LLM. The DecisionAgent (next node) is the one that adds language-aware nuance on top.
+Deterministically rank candidate providers so the same query always returns the same ordering. Pure function: no LLM. The DecisionAgent (next node) is the one that adds language-aware nuance on top.
 
 ## The formula
 
@@ -50,7 +50,7 @@ else:
     availability_score = 0.0
 ```
 
-When `parsed_intent.time_window is None`, treat it as "any time today" — use the second branch.
+When `parsed_intent.time_window is None`, treat it as "any time today": use the second branch.
 
 ### `price_score`
 
@@ -83,12 +83,12 @@ class RankedCandidate(BaseModel):
 
 Must be one sentence, in **English** (the DecisionAgent will translate for the user-facing message; here we just need it for the trace).
 
-> `f"{provider.name}: {distance_km:.1f} km away, rating {provider.rating}, {availability_label}, Rs. {provider.price_per_visit} — final score {score:.2f}"`
+> `f"{provider.name}: {distance_km:.1f} km away, rating {provider.rating}, {availability_label}, Rs. {provider.price_per_visit} - final score {score:.2f}"`
 
 Where `availability_label` is one of `"exact slot free"`, `"available in window"`, `"available same day"`, `"unavailable today"`.
 
 Example:
-> "Ali AC Services: 2.1 km away, rating 4.7, exact slot free, Rs. 1500 — final score 0.89"
+> "Ali AC Services: 2.1 km away, rating 4.7, exact slot free, Rs. 1500 - final score 0.89"
 
 ## Ordering
 
@@ -101,7 +101,7 @@ Sort `ranked` by `score` descending. On ties (score within 0.02), break by:
 
 - **Empty `state.candidates`** → set `state.ranked = []` and emit a trace event with `reasoning="no candidates to rank"`. DecisionAgent will handle the empty case.
 - **Single candidate** → `price_score = 0.5` (neutral, see formula); still emit a one-element `ranked`.
-- **All candidates have `availability_score = 0.0`** → still rank them; the DecisionAgent will tell the user "no one is available in your window — try later".
+- **All candidates have `availability_score = 0.0`** → still rank them; the DecisionAgent will tell the user "no one is available in your window, try later".
 - **Distance unavailable** (real Distance Matrix failed) → fall back to haversine. Tool layer handles this internally; the ranking node doesn't see the failure.
 
 ## Trace event
@@ -116,4 +116,4 @@ async with emit_trace(state, agent="RankingAgent", phase="decide", input={"candi
 
 ## Why no LLM here
 
-Determinism + speed + cost. Judges can read the formula and verify the math. The LLM (DecisionAgent) is *not* re-ranking — it's just choosing the top-N and writing the user-facing justification.
+Determinism + speed + cost. Judges can read the formula and verify the math. The LLM (DecisionAgent) is *not* re-ranking: it's just choosing the top-N and writing the user-facing justification.

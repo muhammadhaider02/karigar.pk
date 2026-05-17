@@ -1,6 +1,6 @@
 # Skill: Booking Simulator
 
-> Load this skill when working on `backend/app/graph/nodes/booking.py`, `tools/availability.py`, `tools/bookings.py`, or `tools/notifier.py`.
+> Load this skill when working on `backend/app/graph/nodes/booking.py`, `tools/availability.py`, `tools/bookings.py` or `tools/notifier.py`.
 > Owner: `backend-engineer`.
 
 ## Purpose
@@ -61,7 +61,7 @@ async def check_and_hold(provider_id: str, slot_start: datetime, slot_end: datet
     return booking
 ```
 
-Never check-then-insert with two separate queries — that's the race condition the resolver was built to catch, but we shouldn't rely on the resolver as a happy-path mechanism.
+Never check-then-insert with two separate queries: that's the race condition the resolver was built to catch, but we shouldn't rely on the resolver as a happy-path mechanism.
 
 ## BookingAgent flow
 
@@ -104,7 +104,7 @@ async def run(state: RequestSession) -> RequestSession:
 `backend/app/tools/bookings.py::render_receipt` produces a PNG at `backend/data/receipts/<booking_id>.png` using PIL. Layout (text-only, no logos to keep dependencies minimal):
 
 ```
-KARIGAR — BOOKING CONFIRMATION
+KARIGAR: BOOKING CONFIRMATION
 -----------------------------------
 Booking ID:   {booking.id[:8]}
 Service:      {service_type}
@@ -143,7 +143,7 @@ Reply *CANCEL {booking.id[:8]}* to cancel.
 
 Urdu and English variants live in `backend/app/tools/notifier.py::TEMPLATES`. Each template is short and has the same placeholders.
 
-The Flutter app renders this exact string inside its faux-WhatsApp `screens/confirmation.dart` screen — green bubble, send-tick icons, "today" timestamp.
+The Flutter app renders this exact string inside its faux-WhatsApp `screens/confirmation.dart` screen (green bubble, send-tick icons, "today" timestamp).
 
 ## Booking statuses + transitions
 
@@ -170,4 +170,4 @@ State transitions live in `backend/app/tools/bookings.py::transition`. Only `CON
 - **`SlotConflict` on first try** → see Conflict Resolver skill. Treat it like any other conflict event.
 - **Provider phone missing in mock data** → never happens with our seed, but if it does, fall back to `"0300-000-0000"` and log a warning.
 - **Receipt render fails** → still persist the booking; `receipt_png_path = None`; Flutter shows a fallback receipt rendered client-side.
-- **Notifier send fails** → log + emit a `tool_call` with `result={"error": "..."}`; booking is still `CONFIRMED`. We do **not** roll back — confirmation can be re-sent.
+- **Notifier send fails** → log + emit a `tool_call` with `result={"error": "..."}`; booking is still `CONFIRMED`. We do **not** roll back (confirmation can be re-sent).

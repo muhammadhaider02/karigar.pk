@@ -1,7 +1,7 @@
 # Workflow: `/seed-mock`
 
 > Antigravity slash command. Regenerates the synthetic provider dataset and primes the SQLite DB.
-> Idempotent — safe to run any number of times.
+> Idempotent: safe to run any number of times.
 
 ## When to run
 
@@ -21,7 +21,7 @@
 
 ## Steps (the agent executes these in order)
 
-1. **Pre-check** — confirm we're inside `backend/` and `uv` is available:
+1. **Pre-check**: confirm we're inside `backend/` and `uv` is available:
    ```bash
    cd backend
    uv --version
@@ -61,7 +61,7 @@ A short markdown report at `backend/data/seed-report.md` listing:
 |---|---|
 | `uv: command not found` | Install uv: see `https://docs.astral.sh/uv/getting-started/installation/` |
 | `ModuleNotFoundError: app` | Make sure CWD is `backend/`, not repo root |
-| Canonical query doesn't return Ali AC Services | Inspect `seed.py` to ensure Ali AC Services is in G-13 with the right `busy_slots` and the highest combined rank for the canonical query — see `skills/provider-ranking-rules.md` |
+| Canonical query doesn't return Ali AC Services | Inspect `seed.py` to ensure Ali AC Services is in G-13 with the right `busy_slots` and the highest combined rank for the canonical query (see `skills/provider-ranking-rules.md`) |
 | `IntegrityError: UNIQUE constraint failed` | DB wasn't wiped; re-run step 2 |
 
 ## Acceptance criteria

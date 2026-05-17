@@ -20,7 +20,7 @@ async def run(state: RequestSession) -> RequestSession:
 ```
 
 Rules:
-- Nodes are `async`. Even purely computational nodes (Ranking) — keeps the graph uniform.
+- Nodes are `async`. Even purely computational nodes (Ranking): keeps the graph uniform.
 - Nodes **mutate and return** the shared `RequestSession`. Never return a new object.
 - Nodes **must not** call other nodes. Only the Orchestrator wires nodes together.
 - Nodes **must** emit exactly one trace event per invocation (except the Planning step, which is the only multi-event step and is owned by the Orchestrator).
@@ -74,7 +74,7 @@ When the Conflict Resolver re-invokes a happy-path node, pass `phase_override="r
 
 ## Error handling
 
-- Domain errors (`SlotConflict`, `ProviderNotFound`, `LanguageNotSupported`) are defined in `backend/app/graph/errors.py`. Raise them — don't swallow.
+- Domain errors (`SlotConflict`, `ProviderNotFound`, `LanguageNotSupported`) are defined in `backend/app/graph/errors.py`. Raise them, don't swallow.
 - The Orchestrator catches them and routes:
   - `SlotConflict` → publish `slot_conflict` event → Conflict Resolver
   - `ProviderNotFound` → emit an `act` trace with `output={"empty": true}` and short-circuit to a "no providers" response
@@ -82,7 +82,7 @@ When the Conflict Resolver re-invokes a happy-path node, pass `phase_override="r
 
 ## State mutation rules
 
-`RequestSession` is **append-only** for the trace and `excluded_provider_ids`. Replacing those lists in a node will lose data from earlier nodes — don't do it.
+`RequestSession` is **append-only** for the trace and `excluded_provider_ids`. Replacing those lists in a node will lose data from earlier nodes, so don't do it.
 
 Allowed mutations per node:
 | Node | Reads | Writes |

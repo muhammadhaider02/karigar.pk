@@ -2,7 +2,7 @@
 
 ## Challenge Overview
 
-Informal economy, including plumbers, electricians, tutors, beauticians, and home service  
+Informal economy, including plumbers, electricians, tutors, beauticians and home service  
 providers, operates largely through:  
 ● WhatsApp messages  
 ● phone calls  
@@ -21,7 +21,7 @@ At the same time, users struggle to find:
 
 ## Problem Statement
 
-Build an Agentic AI System that automates the end-to-end lifecycle of a service request —  
+Build an Agentic AI System that automates the end-to-end lifecycle of a service request:  
 from user intent to booking and follow-up.  
 Your system must:  
 1\. Understand user service requests (in natural language)  
@@ -121,27 +121,27 @@ Include:
 
 ## Evaluation Criteria
 
-1\. Use of Google Antigravity — 25%  
+1\. Use of Google Antigravity: 25%  
 ● Core orchestration handled via Antigravity  
 ● Effective use of tools (Maps, APIs)  
 ● Demonstrates planning \+ execution  
-2\. Agentic Reasoning & Workflow — 20%  
+2\. Agentic Reasoning & Workflow: 20%  
 ● Multi-step reasoning  
 ● Logical flow from request → decision → action  
 ● Evidence of autonomy  
-3\. Matching Quality & Decision Logic — 20%  
+3\. Matching Quality & Decision Logic: 20%  
 ● Relevant provider selection  
 ● Clear ranking criteria  
 ● Strong reasoning behind decisions  
-4\. Action Simulation & Execution — 15%  
+4\. Action Simulation & Execution: 15%  
 ● Booking process realistically simulated  
 ● Clear system state change (confirmation, scheduling)  
 ● End-to-end workflow demonstrated  
-5\. Technical Implementation — 10%  
+5\. Technical Implementation: 10%  
 ● Clean architecture  
 ● API/tool integration  
 ● Robust handling of edge cases  
-6\. Innovation & UX — 10%  
+6\. Innovation & UX: 10%  
 ● Creative approach  
 ● Intuitive interface  
 ● Clear and engaging demo

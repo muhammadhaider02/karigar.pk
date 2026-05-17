@@ -1,11 +1,11 @@
 # Skill: Conflict Resolution Policy
 
-> Load this skill when working on `backend/app/graph/conflict_resolver.py`, `nodes/conflict.py`, `events/`, or `scheduler/reminders.py`.
+> Load this skill when working on `backend/app/graph/conflict_resolver.py`, `nodes/conflict.py`, `events/` or `scheduler/reminders.py`.
 > Owner: `backend-engineer`.
 
 ## Purpose
 
-Make the system autonomous when real-world failures happen — no-shows, cancellations, double-bookings, provider drop-outs. This is the agentic-reasoning differentiator most teams won't have.
+Make the system autonomous when real-world failures happen (no-shows, cancellations, double-bookings, provider drop-outs). This is the agentic-reasoning differentiator most teams won't have.
 
 ## The 5 scenarios
 
@@ -40,7 +40,7 @@ MAX_RESOLUTION_ATTEMPTS = 3
 
 After 3 failed auto-rebooks, the resolver:
 1. Emits a final `recover` trace event with `reasoning="exhausted auto-rebook attempts"`.
-2. Sends the user a notification: *"We couldn't auto-rebook. Here are 3 alternatives — please pick one."*
+2. Sends the user a notification: *"We couldn't auto-rebook. Here are 3 alternatives: please pick one."*
 3. Returns the top-3 ranked candidates (excluding the originally-failed ones) for manual selection.
 4. **Does not** invoke BookingAgent.
 
@@ -63,7 +63,7 @@ flowchart TB
 
 | Attempt | Widening |
 |---|---|
-| 1st re-run | No widening — same `time_window` |
+| 1st re-run | No widening (same `time_window`) |
 | 2nd re-run | Widen by `+1h` on each side |
 | 3rd re-run | Widen by `+2h` on each side |
 
@@ -145,8 +145,8 @@ Bus events are also persisted to `conflict_events` table for the trace export.
 
 | Outcome | Roman Urdu | Urdu | English |
 |---|---|---|---|
-| Auto-rebooked | `"{old} ne confirm nahi kiya. Hum ne {new} ko {time} ke liye book kar diya hai."` | `"{old} نے کنفرم نہیں کیا۔ ہم نے {new} کو {time} کے لیے بک کر دیا ہے۔"` | `"{old} didn't confirm — we auto-booked {new} at {time} instead."` |
-| Hand-off | `"Hum auto-rebook nahi kar paaye. 3 alternatives diye hain, please apni pasand chunein."` | `"ہم آٹو ری بک نہیں کر سکے۔ ۳ متبادل دیے ہیں، براہ کرم اپنی پسند چنیں۔"` | `"We couldn't auto-rebook. 3 alternatives are available — please pick one."` |
+| Auto-rebooked | `"{old} ne confirm nahi kiya. Hum ne {new} ko {time} ke liye book kar diya hai."` | `"{old} نے کنفرم نہیں کیا۔ ہم نے {new} کو {time} کے لیے بک کر دیا ہے۔"` | `"{old} didn't confirm, we auto-booked {new} at {time} instead."` |
+| Hand-off | `"Hum auto-rebook nahi kar paaye. 3 alternatives diye hain, please apni pasand chunein."` | `"ہم آٹو ری بک نہیں کر سکے۔ ۳ متبادل دیے ہیں، براہ کرم اپنی پسند چنیں۔"` | `"We couldn't auto-rebook. 3 alternatives are available: please pick one."` |
 
 Templates live in `backend/app/tools/notifier.py::REBOOK_TEMPLATES`.
 

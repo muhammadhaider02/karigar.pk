@@ -1,4 +1,4 @@
-# Karigar — Architecture Deep-Dive
+# Karigar: Architecture Deep-Dive
 
 > Detailed technical reference for engineers working in the repo.
 > For project intro, see [`/README.md`](../README.md). For the spec, see [`/plan.md`](../plan.md). For the brief-deliverable README, see [`README.md`](README.md).
@@ -114,11 +114,11 @@ class Search(Protocol):
 
 | Protocol | Mock | Real |
 |---|---|---|
-| Geocoder | `MockGeocoder` — Islamabad sector lookup table | `GoogleGeocoder` — Geocoding API |
-| ProviderStore | `JsonProviderStore` — reads `data/providers.json` | `GooglePlacesStore` — Places Nearby Search |
+| Geocoder | `MockGeocoder`: Islamabad sector lookup table | `GoogleGeocoder`: Geocoding API |
+| ProviderStore | `JsonProviderStore`: reads `data/providers.json` | `GooglePlacesStore`: Places Nearby Search |
 | Distance | `HaversineDistance` | `GoogleDistanceMatrix` |
-| Availability | `SqliteAvailability` (the only impl — uses DB) | (same) |
-| Notifier | `MockNotifier` — appends to `data/notifier-log.jsonl` and exposes `GET /notifier-log` for the Flutter app | (no real backend; WhatsApp Business API would replace this) |
+| Availability | `SqliteAvailability` (the only impl: uses DB) | (same) |
+| Notifier | `MockNotifier`: appends to `data/notifier-log.jsonl` and exposes `GET /notifier-log` for the Flutter app | (no real backend; WhatsApp Business API would replace this) |
 | Search | `AntigravityBrowserSearch` (default) | `GeminiGroundedSearch` (fallback when running outside Antigravity) |
 
 ### Selecting an implementation
@@ -222,17 +222,17 @@ The critical constraint: `UNIQUE(provider_id, slot_start)` on `bookings`. This i
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | `POST` | `/sessions` | `{user_id, raw_text}` | `{session_id, status}` |
-| `GET` | `/sessions/{id}` | — | full session snapshot |
-| `GET` | `/sessions/{id}/stream` | — | SSE stream of `TraceEvent` until terminal step |
-| `GET` | `/sessions/{id}/trace.md` | — | Markdown export of the trace |
-| `GET` | `/bookings` | — | List bookings for the current user |
-| `POST` | `/bookings/{id}/cancel?rebook={true\|false}` | — | Cancels (and optionally rebooks) |
-| `POST` | `/bookings/{id}/arrived` | — | Marks provider as arrived (cancels watchdog) |
-| `POST` | `/bookings/{id}/complete` | — | Marks `COMPLETED` |
+| `GET` | `/sessions/{id}` | - | full session snapshot |
+| `GET` | `/sessions/{id}/stream` | - | SSE stream of `TraceEvent` until terminal step |
+| `GET` | `/sessions/{id}/trace.md` | - | Markdown export of the trace |
+| `GET` | `/bookings` | - | List bookings for the current user |
+| `POST` | `/bookings/{id}/cancel?rebook={true|false}` | - | Cancels (and optionally rebooks) |
+| `POST` | `/bookings/{id}/arrived` | - | Marks provider as arrived (cancels watchdog) |
+| `POST` | `/bookings/{id}/complete` | - | Marks `COMPLETED` |
 | `POST` | `/providers/{id}/unavailable` | `{session_id}` | Triggers proactive conflict |
 | `POST` | `/sessions/{id}/reschedule` | `{new_time_window}` | Publishes `reschedule_requested` |
-| `GET` | `/receipts/{booking_id}.png` | — | The receipt PNG |
-| `GET` | `/notifier-log` | — | Mock WhatsApp message log (for the faux-WhatsApp screen) |
+| `GET` | `/receipts/{booking_id}.png` | - | The receipt PNG |
+| `GET` | `/notifier-log` | - | Mock WhatsApp message log (for the faux-WhatsApp screen) |
 
 ### SSE event format
 
@@ -252,7 +252,7 @@ data: {"session_id":"...","status":"completed"}
 Gemini 2.5 handles all three languages natively. No translation layer.
 
 1. `IntentAgent` sets `parsed_intent.language` based on the input.
-2. `DecisionAgent` and `ConflictResolverAgent` are instructed to respond *in `parsed_intent.language`* — their prompts include the language enum.
+2. `DecisionAgent` and `ConflictResolverAgent` are instructed to respond *in `parsed_intent.language`*: their prompts include the language enum.
 3. `Notifier` templates are indexed by language (`TEMPLATES["roman_ur"]`, `TEMPLATES["ur"]`, `TEMPLATES["en"]`).
 4. Flutter wraps Urdu strings in `Directionality(textDirection: TextDirection.rtl)` and uses Noto Nastaliq Urdu for that script.
 
@@ -288,7 +288,7 @@ class AntigravityBrowserSearch:
 
 Used by `DiscoveryAgent` for high-uncertainty candidates (e.g. a provider with rating in `[3.5, 4.0]` and no reviews in the mock dataset). Result snippets are appended to the candidate's `notes` so the DecisionAgent can cite them.
 
-This is what makes Antigravity "central to runtime", not just dev — the brief's explicit requirement.
+This is what makes Antigravity "central to runtime", not just dev: the brief's explicit requirement.
 
 ## 10. Where to look when something breaks
 
@@ -298,6 +298,6 @@ This is what makes Antigravity "central to runtime", not just dev — the brief'
 | Wrong provider ranks first | `skills/provider-ranking-rules.md` formula; check sub-scores in the trace event |
 | Booking fails with `SlotConflict` immediately | Mock data has overlapping `busy_slots`; re-run `/seed-mock` |
 | No-show watchdog never fires | `DEMO_TIME_SCALE` not set; or APScheduler not started in `app/main.py::startup` |
-| SSE stream cuts off | Reverse-proxy buffering — bypass `nginx` for `/sessions/*/stream` |
+| SSE stream cuts off | Reverse-proxy buffering: bypass `nginx` for `/sessions/*/stream` |
 | Flutter shows English when user spoke Urdu | `parsed_intent.language` is being overwritten somewhere; trace each node's `output.language` |
 | Resolution loop runs > 3 times | `state.resolution_attempts` isn't being persisted between event handlings; check `sessions.save` calls in `conflict_resolver.py` |

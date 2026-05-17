@@ -1,11 +1,11 @@
 # Skill: Flutter Trace UI
 
-> Load this skill when working on `mobile/lib/screens/trace.dart`, `mobile/lib/widgets/agent_step_card.dart`, or any widget that renders an agent trace event.
+> Load this skill when working on `mobile/lib/screens/trace.dart`, `mobile/lib/widgets/agent_step_card.dart` or any widget that renders an agent trace event.
 > Owner: `flutter-engineer`.
 
 ## Purpose
 
-The trace timeline is the single most important screen in Karigar — judges spend most of their time looking at it. It must look intentional, polished, and consistent with Antigravity's own Mission Control UI.
+The trace timeline is the single most important screen in Karigar: judges spend most of their time looking at it. It must look intentional, polished and consistent with Antigravity's own Mission Control UI.
 
 ## Data shape (consumed from SSE)
 
@@ -38,7 +38,7 @@ The SSE client (`mobile/lib/services/sse_client.dart`) streams these into a Rive
 
 | Agent | Icon (Material) | Accent color | Notes |
 |---|---|---|---|
-| IntentAgent | `Icons.psychology` | `colorScheme.primary` | Brain — "understanding" |
+| IntentAgent | `Icons.psychology` | `colorScheme.primary` | Brain: "understanding" |
 | Orchestrator (Plan) | `Icons.checklist_rtl` | `colorScheme.secondary` | Numbered checklist |
 | DiscoveryAgent | `Icons.search` | `colorScheme.tertiary` | Magnifier |
 | RankingAgent | `Icons.bar_chart` | `colorScheme.tertiary` | Bar chart |
@@ -88,7 +88,7 @@ A single trace event renders as one card on a vertical timeline rail:
 - **Fade-in + slide-up** on new event arrival (200 ms `Curves.easeOutCubic`).
 - **Pulse** on the latency badge for events still streaming (use `AnimatedOpacity` looped).
 - **Rail draw** as the next card mounts (250 ms vertical line growth using `AnimatedContainer`).
-- No animation longer than 250 ms — the trace can fire 7+ events in under 2 s.
+- No animation longer than 250 ms: the trace can fire 7+ events in under 2 s.
 
 ## States
 
@@ -97,7 +97,7 @@ A single trace event renders as one card on a vertical timeline rail:
 | Empty (no session yet) | Centered Antigravity-style placeholder with caption *"Send a request to see the agents work."* |
 | Loading (session started, no events yet) | Skeleton card with shimmer for 1–2 s |
 | Streaming | Live cards, last one pulses |
-| Error (SSE disconnected) | Persistent banner: *"Live trace disconnected — retrying..."*; client polls `GET /sessions/{id}/trace` every 500 ms as fallback |
+| Error (SSE disconnected) | Persistent banner: *"Live trace disconnected, retrying..."*; client polls `GET /sessions/{id}/trace` every 500 ms as fallback |
 | Complete | Static cards, last one shows a "✓ Done" pill |
 
 ## RTL (Urdu)
@@ -106,11 +106,11 @@ When `state.parsed_intent.language == "ur"`, wrap the timeline in `Directionalit
 
 ## Required widgets
 
-- `mobile/lib/widgets/agent_step_card.dart` — the card above
-- `mobile/lib/widgets/tool_call_chip.dart` — small pill, name + optional latency
-- `mobile/lib/widgets/phase_badge.dart` — coloured pill
-- `mobile/lib/widgets/latency_badge.dart` — clock icon + color-coded text
-- `mobile/lib/screens/trace.dart` — the full timeline; consumes `traceProvider(sessionId)`
+- `mobile/lib/widgets/agent_step_card.dart`: the card above
+- `mobile/lib/widgets/tool_call_chip.dart`: small pill, name + optional latency
+- `mobile/lib/widgets/phase_badge.dart`: coloured pill
+- `mobile/lib/widgets/latency_badge.dart`: clock icon + color-coded text
+- `mobile/lib/screens/trace.dart`: the full timeline; consumes `traceProvider(sessionId)`
 
 ## Theming
 
@@ -121,7 +121,7 @@ Use `Theme.of(context).colorScheme` everywhere. Define the app theme in `mobile/
 
 ## Don'ts
 
-- Don't use raw hex colours in widgets — go through `colorScheme`.
+- Don't use raw hex colours in widgets: go through `colorScheme`.
 - Don't truncate `reasoning`; it's the most important text on the card. Wrap, don't ellipsize.
-- Don't sort events client-side — trust the `step` field's order from the server.
-- Don't auto-collapse the input/output on Recover events — those are the moments the user wants to inspect.
+- Don't sort events client-side: trust the `step` field's order from the server.
+- Don't auto-collapse the input/output on Recover events: those are the moments the user wants to inspect.

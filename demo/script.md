@@ -29,14 +29,14 @@
 **Visual**: Title card → cut to a quick montage of WhatsApp chats / a missed-call screenshot / a confused user.
 
 **Voice-over**:
-> "Pakistan's informal economy — plumbers, electricians, AC technicians — runs on WhatsApp messages, phone calls, and word-of-mouth. Finding a reliable karigar for what you need, when you need it, is harder than it should be. We built **Karigar**: an agentic AI orchestrator that turns one natural-language sentence into a confirmed booking — and rebooks you autonomously if anything goes wrong."
+> "Pakistan's informal economy (plumbers, electricians, AC technicians) runs on WhatsApp messages, phone calls and word-of-mouth. Finding a reliable karigar for what you need, when you need it, is harder than it should be. We built **Karigar**: an agentic AI orchestrator that turns one natural-language sentence into a confirmed booking, and rebooks you autonomously if anything goes wrong."
 
 ### 0:20 – 0:35 — Open Antigravity Mission Control (15 s)
 
 **Visual**: Cut to the Antigravity Agent Manager window. Show the 5 dev agents in `agents.md` and the 6 skills in `skills/`. Hover on a skill to show it loaded on demand.
 
 **Voice-over**:
-> "Built entirely inside Google Antigravity. Five specialised dev agents, six on-demand skills, two workflows — Antigravity orchestrates the build."
+> "Built entirely inside Google Antigravity. Five specialised dev agents, six on-demand skills, two workflows: Antigravity orchestrates the build."
 
 ### 0:35 – 1:10 — The query in Roman Urdu (35 s)
 
@@ -47,7 +47,7 @@
 The transcribed text appears in the chat. User taps send.
 
 **Voice-over**:
-> "I'll ask in Roman Urdu — the way most users actually talk."
+> "I'll ask in Roman Urdu: the way most users actually talk."
 
 ### 1:10 – 2:00 — Live agent trace (50 s)
 
@@ -62,18 +62,18 @@ The transcribed text appears in the chat. User taps send.
 7. **FollowupAgent (Follow-up)** — "Scheduled T-1h reminder, T+15min watchdog, T+2h completion"
 
 **Voice-over** (over the animation):
-> "Watch the agents work. Intent. Plan. Discover — using Antigravity's Browser subagent to enrich the providers with reputation snippets. Rank. Decide. Book. Schedule follow-ups. Every step is labelled with its phase — Plan, Decide, Act, Follow-up — and every tool call is named. This is the agent trace the brief asks for."
+> "Watch the agents work. Intent. Plan. Discover: using Antigravity's Browser subagent to enrich the providers with reputation snippets. Rank. Decide. Book. Schedule follow-ups. Every step is labelled with its phase (Plan, Decide, Act, Follow-up) and every tool call is named. This is the agent trace the brief asks for."
 
 ### 2:00 – 2:25 — Confirmation (25 s)
 
 **Visual**: App switches to the faux-WhatsApp confirmation screen — green bubbles, "Karigar Booking Confirmed", details in Roman Urdu, ticks.
 
 **Voice-over**:
-> "Confirmation arrives in Roman Urdu — the same language the user spoke. A receipt is generated, a booking is in SQLite, and three follow-up jobs are queued."
+> "Confirmation arrives in Roman Urdu: the same language the user spoke. A receipt is generated, a booking is in SQLite and three follow-up jobs are queued."
 
-### 2:25 – 3:10 — The recovery moment (45 s) — **the differentiator**
+### 2:25 - 3:10: The recovery moment (45 s): **the differentiator**
 
-**Visual**: Title overlay: *"Demo time-scale: 1 sec = 1 min."* The bookings list shows the booking. ~15 seconds pass (= 15 simulated minutes after the slot start). A notification fires: *"Ali AC Services didn't confirm — auto-rebooking..."*
+**Visual**: Title overlay: *"Demo time-scale: 1 sec = 1 min."* The bookings list shows the booking. ~15 seconds pass (= 15 simulated minutes after the slot start). A notification fires: *"Ali AC Services didn't confirm, auto-rebooking..."*
 
 Cut back to the Trace screen. New cards animate in with amber **Recover** badges:
 
@@ -87,14 +87,14 @@ Then a new faux-WhatsApp message pops:
 > *"Ali AC Services ne confirm nahi kiya. Hum ne Hassan Cooling Experts ko 10:00 ke liye book kar diya hai."*
 
 **Voice-over** (over the recovery):
-> "Provider Ali AC Services doesn't show up. The no-show watchdog fires. The seventh agent — the Conflict Resolver — wakes up, excludes Ali, and re-runs the pipeline. Within seconds, Hassan Cooling Experts is booked. The user is notified in their language. This is the agentic autonomy the brief is looking for — recovery from real-world failure, with no human prompt."
+> "Provider Ali AC Services doesn't show up. The no-show watchdog fires. The seventh agent (the Conflict Resolver) wakes up, excludes Ali and re-runs the pipeline. Within seconds, Hassan Cooling Experts is booked. The user is notified in their language. This is the agentic autonomy the brief is looking for: recovery from real-world failure, with no human prompt."
 
 ### 3:10 – 3:30 — Multilingual proof (20 s)
 
 **Visual**: Quick cut — same query in Urdu script ("کل صبح جی-۱۳ میں اے سی ٹیکنیشن چاہیے") and in English ("I need an AC technician in G-13 tomorrow morning"). Show that the same agent flow runs and the confirmation comes back in matching language.
 
 **Voice-over**:
-> "Same query, three languages — Urdu, Roman Urdu, English. The agent always replies in the language the user spoke."
+> "Same query, three languages: Urdu, Roman Urdu, English. The agent always replies in the language the user spoke."
 
 ### 3:30 – 3:50 — Antigravity, end to end (20 s)
 
@@ -104,11 +104,11 @@ Then a new faux-WhatsApp message pops:
 - The exported `trace.md` open in the Editor
 
 **Voice-over**:
-> "Everything you just saw: built in Antigravity, executed using its Browser subagent at runtime, recorded by Antigravity, exported as Antigravity Artifacts. The trace markdown — Decisions, Tool usage, Action execution, in that order — is part of our submission."
+> "Everything you just saw: built in Antigravity, executed using its Browser subagent at runtime, recorded by Antigravity, exported as Antigravity Artifacts. The trace markdown (Decisions, Tool usage, Action execution, in that order) is part of our submission."
 
 ### 3:50 – 4:00 — Wrap (10 s)
 
-**Visual**: Logo + tagline: *"Karigar — an agent for every karigar."* GitHub URL on screen.
+**Visual**: Logo + tagline: *"Karigar: an agent for every karigar."* GitHub URL on screen.
 
 **Voice-over**:
 > "Karigar. One sentence, seven agents, zero missed appointments. Thank you."
@@ -134,7 +134,7 @@ Then a new faux-WhatsApp message pops:
 
 ## Submission artifact list
 
-- [ ] `demo/karigar-demo.mp4` — final cut, 4 min, 1080p
-- [ ] `demo/karigar-demo-browser-recording.webm` — the raw Antigravity Browser recording
-- [ ] `demo/trace-export.md` — the agent trace for the demo session, exported via `GET /sessions/{id}/trace.md`
+- [ ] `demo/karigar-demo.mp4`: final cut, 4 min, 1080p
+- [ ] `demo/karigar-demo-browser-recording.webm`: the raw Antigravity Browser recording
+- [ ] `demo/trace-export.md`: the agent trace for the demo session, exported via `GET /sessions/{id}/trace.md`
 - [ ] `demo/screenshots/` — at least: trace timeline, faux-WhatsApp confirmation, recovery moment
