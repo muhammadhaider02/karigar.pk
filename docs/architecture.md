@@ -97,7 +97,7 @@ purposes. The split is deliberate and load-bearing:
 
 `backend/runtime/` is wiped by the `/seed-mock` workflow and is regenerated
 on every fresh run. If you ever see code referencing `data/karigar.db`
-(without the `runtime/` prefix) it's a bug — older versions of the project
+(without the `runtime/` prefix) it's a bug; older versions of the project
 used a single `backend/data/` folder for both source and runtime, which was
 confusing.
 
@@ -291,7 +291,7 @@ Used in:
 - `scheduler/reminders.py` when registering jobs
 - `graph/conflict_resolver.py` when adding `asyncio.sleep` between trace events for demo pacing
 
-## 9. Antigravity Browser subagent — Search tool
+## 9. Antigravity Browser subagent: Search tool
 
 `backend/app/tools/search.py`:
 

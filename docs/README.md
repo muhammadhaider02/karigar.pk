@@ -17,7 +17,7 @@
 ### Prerequisites
 
 - **Python 3.11** (managed automatically by `uv`)
-- **Flutter 3.x** (with an Android emulator / iOS simulator / a device)
+- **Flutter 3.38+** (with an Android emulator / iOS simulator / a device)
 - **[uv](https://docs.astral.sh/uv/)**: `winget install astral-sh.uv` on Windows, `brew install uv` on macOS
 - A **Google AI Studio API key** for Gemini (free tier is enough for the demo).
   Get one at https://aistudio.google.com/apikey
@@ -121,7 +121,7 @@ For the full architecture deep-dive (state contracts, tool protocols, event-bus 
 | # | Agent | Phase | What it does |
 |---|---|---|---|
 | 1 | IntentAgent | plan | Parses Urdu / Roman Urdu / English → typed `ParsedIntent` |
-| — | Planning step (Orchestrator) | plan | Emits the 5-step execution plan to the trace |
+| - | Planning step (Orchestrator) | plan | Emits the 5-step execution plan to the trace |
 | 2 | DiscoveryAgent | act | Geocoder + ProviderStore + optional Search-via-Antigravity-Browser |
 | 3 | RankingAgent | decide | Weighted scoring: 0.4 proximity + 0.3 rating + 0.2 availability + 0.1 price |
 | 4 | DecisionAgent | decide | Gemini picks top-N + writes user-facing justification in their language |
@@ -175,7 +175,7 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 
 ### Layer 3: Deliverables produced by Antigravity
 
-- The 3–5 min **demo video** is recorded through Antigravity's Browser subagent, so the deliverable itself is an Antigravity Artifact.
+- The 3 to 5 min **demo video** is recorded through Antigravity's Browser subagent, so the deliverable itself is an Antigravity Artifact.
 - The **agent trace** export (`GET /sessions/{id}/trace.md`) is published alongside Antigravity's own Walkthrough and Implementation Plan artifacts as the "Agent Trace / Logs" submission.
 
 ---
@@ -205,7 +205,7 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 - **Pydantic v2**: typed state objects and LLM structured outputs
 
 ### Mobile
-- **Flutter 3.x** with `dio`, `flutter_sse`, `speech_to_text` (ur-PK locale), `flutter_tts`, `flutter_local_notifications`, `google_maps_flutter` (optional) and `riverpod`
+- **Flutter 3.38+** with `provider` (state management), `http` (API client), `google_maps_flutter` + `flutter_map` (mapping), `firebase_auth` + `firebase_messaging` (auth and push notifications), `geolocator` + `permission_handler` (location), `image_picker` (worker profile photos), `flutter_animate` + `google_fonts` (UI) and a custom SSE client (`sse_stub.dart` / `sse_web.dart`) for live trace streaming
 
 ### Dev tooling
 - **uv**: Python project + virtualenv + lockfile management
@@ -230,5 +230,5 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 - **Gemini API quota** during the demo is mitigated via a `DEMO_MODE` cache (see
   `backend/app/graph/demo_cache.py`) that returns deterministic responses for the 5
   canonical demo prompts; unknown prompts still fall through to the live LLM.
-- **No user authentication**: onboarding accepts a display name only. A production version would require phone-OTP auth.
+- **Authentication is Firebase Phone OTP**: the app uses `firebase_auth` with phone-number verification. Firebase Console registration of the Android/iOS app IDs is required for Auth to work on a physical device; the emulator works without it.
 - **Single-region**: sector lookup tables are Islamabad-only. Extending to Lahore, Karachi etc. is purely a data exercise.

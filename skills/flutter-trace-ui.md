@@ -95,7 +95,7 @@ A single trace event renders as one card on a vertical timeline rail:
 | State | What to render |
 |---|---|
 | Empty (no session yet) | Centered Antigravity-style placeholder with caption *"Send a request to see the agents work."* |
-| Loading (session started, no events yet) | Skeleton card with shimmer for 1–2 s |
+| Loading (session started, no events yet) | Skeleton card with shimmer for 1 to 2 s |
 | Streaming | Live cards, last one pulses |
 | Error (SSE disconnected) | Persistent banner: *"Live trace disconnected, retrying..."*; client polls `GET /sessions/{id}/trace` every 500 ms as fallback |
 | Complete | Static cards, last one shows a "✓ Done" pill |

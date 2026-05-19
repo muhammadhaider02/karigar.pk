@@ -83,7 +83,7 @@ For tests that exercise the scheduler, set `DEMO_TIME_SCALE=600` (1 real-second 
 |---|---|
 | `GOOGLE_API_KEY not set` | Either set the env var or run tests with `DEMO_MODE=true` to use cached responses |
 | Test hangs on scheduler | `DEMO_TIME_SCALE` not set in fixture: APScheduler is waiting real time |
-| `SlotConflict` test always passes both sides | DB UNIQUE constraint missing — re-check `backend/app/db/models.py::Booking.__table_args__` |
+| `SlotConflict` test always passes both sides | DB UNIQUE constraint missing; re-check `backend/app/db/models.py::Booking.__table_args__` |
 | Roman Urdu test asserts on Urdu | The language detection heuristic regressed (see `skills/multilingual-intent.md`) |
 
 ## Acceptance criteria

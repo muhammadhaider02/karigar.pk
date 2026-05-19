@@ -27,7 +27,7 @@ Rules:
 
 ## Trace event helper
 
-Always use `emit_trace` (lives in `backend/app/graph/trace.py`). It auto-times, auto-numbers the step, and writes to both the state's in-memory `trace[]` and the SSE event bus.
+Always use `emit_trace` (lives in `backend/app/graph/trace.py`). It auto-times, auto-numbers the step and writes to both the state's in-memory `trace[]` and the SSE event bus.
 
 ```python
 async with emit_trace(

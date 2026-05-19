@@ -129,7 +129,7 @@ When `DEMO_TIME_SCALE > 1`, the same job is registered with `run_date = slot_sta
 
 ## Event bus
 
-In-process pub/sub (`backend/app/events/bus.py`). Subscribers register on startup; events are dicts with `key`, `session_id`, and event-specific payload. The Conflict Resolver is the only subscriber to all 5 keys.
+In-process pub/sub (`backend/app/events/bus.py`). Subscribers register on startup; events are dicts with `key`, `session_id` and event-specific payload. The Conflict Resolver is the only subscriber to all 5 keys.
 
 ```python
 bus.subscribe("no_show_detected", conflict_resolver.handle)

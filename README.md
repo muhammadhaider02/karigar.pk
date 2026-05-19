@@ -1,11 +1,11 @@
 <div align="center">
 
-# Karigar: From WhatsApp Message to Confirmed Booking in Seconds
+# Karigar Pakistan
 
-**FROM INTENT TO BOOKING IN ONE MESSAGE**
+**FROM WHATSAPP STYLE MESSAGE TO BOOKING IN SECONDS**
 
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://python.org)
-[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-3.38+-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136.1-005571?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1.2.0-000000?logo=langchain&logoColor=white)](https://langchain-ai.github.io/langgraph/)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?logo=googlegemini&logoColor=white)](https://gemini.google.com/)
@@ -14,7 +14,6 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **Karigar** (کاریگر): Urdu for *artisan / craftsman*.
-> Submission for the Google Antigravity Hackathon.
 
 An agentic AI system that automates the full lifecycle of a service request, from natural-language intent (Urdu / Roman Urdu / English) to provider matching, simulated booking, follow-up and autonomous recovery from real-world failures like no-shows and double-bookings.
 
@@ -60,7 +59,7 @@ Karigar understands. Plans. Searches. Ranks. Decides. Books. Follows up. And if 
 | Component | Stack | Description |
 |:---|:---|:---|
 | **Backend** | Python 3.11, FastAPI, LangGraph, Pydantic v2 | 7-agent state machine with SSE streaming and event bus |
-| **Mobile** | Flutter 3.x, Riverpod, Dio | WhatsApp-style chat, live agent-trace timeline, booking management |
+| **Mobile** | Flutter 3.38+, Provider, http | WhatsApp-style chat, live agent-trace timeline, booking management |
 | **LLM** | Gemini 2.5 Flash (Google AI Studio) | Intent parsing, decision justification, conflict resolution |
 | **Database** | SQLite (aiosqlite), SQLAlchemy | Providers, bookings, session state |
 | **Scheduler** | APScheduler | Reminders, no-show watchdogs, completion checks |
@@ -73,6 +72,7 @@ Karigar understands. Plans. Searches. Ranks. Decides. Books. Follows up. And if 
 ### Prerequisites
 
 - Python 3.11+ and [uv](https://docs.astral.sh/uv/)
+- Flutter 3.10+ (for mobile; run `flutter doctor` to verify)
 - A [Google AI Studio](https://aistudio.google.com/) API key
 
 ### Quick Start
@@ -98,10 +98,27 @@ uv run python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 curl http://127.0.0.1:8000/health    # {"status": "ok"}
 ```
 
+**Mobile (Flutter):**
+
+```bash
+cd mobile
+flutter pub get
+
+# Android emulator (backend must be running)
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+
+# Web
+flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000
+```
+
 **Run tests:**
 
 ```bash
+# Backend
 uv run python -m pytest -v --tb=short
+
+# Mobile
+cd mobile && flutter test
 ```
 
 ---

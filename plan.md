@@ -12,7 +12,7 @@
 Antigravity is used in **two layers**, not just as an editor:
 
 ### Build-time orchestration (the IDE itself)
-- Entire repo developed inside Antigravity, using **Planning mode** to generate Implementation Plans, Task Lists, and Walkthrough artifacts for every milestone.
+- Entire repo developed inside Antigravity, using **Planning mode** to generate Implementation Plans, Task Lists and Walkthrough artifacts for every milestone.
 - An `agents.md` at repo root defines our AI dev team (Product Architect, Backend Engineer, Flutter Engineer, QA Engineer and Demo Ops) so Antigravity spawns the right specialist for each task.
 - A `skills/` directory holds modular `.md` capability files (`multilingual-intent`, `langgraph-node-author`, `provider-ranking-rules`, `booking-simulator`, `conflict-resolution-policy` and `flutter-trace-ui`) which are loaded on-demand to avoid context bloat.
 - A `workflows/` directory exposes slash commands (`/seed-mock`, `/run-e2e`) that chain agents into autonomous pipelines.
@@ -79,7 +79,7 @@ flowchart TB
 
 ## 3. The 7 agents (LangGraph nodes)
 
-The system is **two subgraphs sharing one state object and one trace log**: a linear happy-path graph (agents 1–6) and an event-driven conflict-resolution graph (agent 7) that reuses nodes 2–5.
+The system is **two subgraphs sharing one state object and one trace log**: a linear happy-path graph (agents 1 to 6) and an event-driven conflict-resolution graph (agent 7) that reuses nodes 2 to 5.
 
 Shared state `RequestSession`:
 ```
@@ -130,7 +130,7 @@ Every node calls `trace.append(...)` with this shape, which explicitly separates
 
 ## 4. Tech stack
 
-- **Mobile**: Flutter 3.x — `dio`, `flutter_sse`, `speech_to_text` (ur-PK locale), `flutter_tts`, `flutter_local_notifications`, `google_maps_flutter` (optional), `riverpod`.
+- **Mobile**: Flutter 3.38+, Dart 3.10+: `provider` (state), `http` (API client), `google_maps_flutter` + `flutter_map` (mapping), `firebase_auth` + `firebase_messaging` (auth + push), `geolocator`, `image_picker`, `flutter_animate`, `google_fonts`, custom SSE client (`sse_stub.dart` / `sse_web.dart`).
 - **Backend**: Python 3.11 (managed by `uv`), FastAPI, LangGraph, `langchain-google-genai`, Pydantic v2, SQLAlchemy + SQLite (aiosqlite), APScheduler and `sse-starlette`.
 - **LLM**: Gemini 2.5 Flash (all nodes).
 - **Tools**: Maps (mock + real Google Geocoding/Places/Distance Matrix behind `GOOGLE_MAPS_KEY`), **Search via Antigravity Browser subagent** and mock Notifier.
@@ -205,14 +205,49 @@ Every node calls `trace.append(...)` with this shape, which explicitly separates
     test_happy_path.py
     test_conflict.py
 
-/mobile/                  # Flutter app
+/mobile/                  # Flutter app (package: karigar, id: com.karigar.karigar)
   pubspec.yaml
   pubspec.lock
+  firebase.json
   lib/
     main.dart
-    screens/{onboarding,chat,trace,recommendation,confirmation,bookings}.dart
-    services/{api_client,sse_client,voice,notifications}.dart
-    widgets/{agent_step_card,provider_card,language_badge}.dart
+    firebase_options.dart
+    app/{routes,theme}.dart
+    constants/app_colors.dart
+    models/{agent_event,booking,provider_model}.dart
+    providers/app_state.dart
+    screens/
+      splash_screen.dart          # onboarding entry point
+      language_select_screen.dart
+      role_selection_screen.dart
+      home_screen.dart
+      provider_selection_screen.dart   # recommendation
+      provider_profile_screen.dart
+      booking_confirmed_screen.dart    # confirmation
+      booking_history_screen.dart      # bookings list
+      live_tracking_screen.dart
+      agent_trace_screen.dart          # mission control trace UI
+      messages_screen.dart             # chat
+      login_screen.dart
+      phone_auth_screen.dart
+      review_screen.dart
+      dispute_screen.dart
+      worker_hub_screen.dart
+      worker_area_screen.dart
+      worker_job_request_screen.dart
+      worker_profile_setup_screen.dart
+      worker_skill_selection_screen.dart
+    services/
+      api_client.dart             # KarigarApiClient, configurable base URL
+      sse_stub.dart               # platform stub (native)
+      sse_web.dart                # web SSE implementation
+    widgets/
+      animated_background.dart
+      karigar_logo.dart
+      karigar_screen_header.dart
+  android/
+  ios/
+  assets/images/
 
 /docs/
   README.md               # detailed setup + the 4 brief-required sections
@@ -231,7 +266,7 @@ price_per_visit, phone, working_hours, busy_slots[]
 ```
 
 `services[]` values are stored as lower_snake_case identifiers (`"ac_technician"`,
-`"plumber"`, …) — these are machine-readable enum values used for matching, DB
+`"plumber"`, …); these are machine-readable enum values used for matching, DB
 queries and trace events. The user-facing form (`"AC Technician"`, `"Plumber"`)
 is produced by `ServiceType.pretty_name` and used on the receipt, in the
 faux-WhatsApp message and in the trace UI; the JSON values themselves are
@@ -280,7 +315,7 @@ Five scenarios are wired end-to-end, all observable in the live trace:
 | Double-booking race | `Availability.check_and_hold` UNIQUE constraint loss | Loser routes to resolver |
 | Reschedule | User picks new `time_window` | Resolver widens search with new constraint |
 
-**Demo plan**: with `DEMO_TIME_SCALE=60` (1 real-second = 1 simulated-minute), a fresh booking will trigger a no-show 15 seconds later, the resolver activates on stream, and the Mission Control timeline updates with the recovery in real time. This is the single most rubric-friendly moment in the demo.
+**Demo plan**: with `DEMO_TIME_SCALE=60` (1 real-second = 1 simulated-minute), a fresh booking will trigger a no-show 15 seconds later, the resolver activates on stream and the Mission Control timeline updates with the recovery in real time. This is the single most rubric-friendly moment in the demo.
 
 ## 10. Agent trace / logs (mandatory deliverable)
 
@@ -309,7 +344,7 @@ Five scenarios are wired end-to-end, all observable in the live trace:
 - Google Maps APIs are integrated but optional; the system fully functions on mock data without any API key.
 - Gemini API quota constraints are mitigated via a `DEMO_MODE` cache of 5 canonical demo inputs.
 
-## 11. 4-day execution timeline (team of 2–4)
+## 11. 4-day execution timeline (team of 2 to 4)
 
 - **Day 1: Foundation**: install Antigravity, scaffold `agents.md` + 6 skills + 2 workflows, FastAPI + LangGraph skeleton, seed PII-safe `providers.json`, build `Geocoder` + `ProviderStore` + `Distance` + `Search` (Antigravity Browser subagent wrapper) tools with mock implementations, implement IntentAgent + Orchestrator Planning step + DiscoveryAgent and unit test with curl.
 - **Day 2: Complete happy path**: Ranking + Decision + Booking + Follow-up nodes, SQLite + APScheduler, SSE streaming endpoint with the full trace shape (phase + tool_calls) and end-to-end CLI test covering all 3 languages.

@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "1083929866010",
+    "project_id": "karigar-ai-c0f37",
+    "storage_bucket": "karigar-ai-c0f37.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1083929866010:android:5115cfaca73744949546a3",
+        "android_client_info": {
+          "package_name": "com.karigar.karigar"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1083929866010-el49sdt82oamumb9v1q1aqi8198d4gm2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAXiqOMgEvjiBrlhM9_UQ_8l26YO-nQ_Bg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1083929866010-el49sdt82oamumb9v1q1aqi8198d4gm2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1083929866010-mnvrvdr51hjevem8lvlq1rr3o9tsht0v.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.karigar.karigar"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
