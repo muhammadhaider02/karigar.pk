@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app/routes.dart';
 
 enum _Role { customer, worker }
@@ -19,10 +20,17 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   static const _textGrey = Color(0xFF8696A0);
 
   void _onContinue() {
-    if (_selected == _Role.worker) {
-      Navigator.pushNamed(context, AppRoutes.workerProfile);
+    // Both roles must authenticate first. The auth screen routes to
+    // workerProfile (registration) or home based on the selected role.
+    final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+    final destAfterAuth = _selected == _Role.worker
+        ? AppRoutes.workerProfile
+        : AppRoutes.home;
+
+    if (isLoggedIn) {
+      Navigator.pushNamed(context, destAfterAuth);
     } else {
-      Navigator.pushNamed(context, AppRoutes.auth);
+      Navigator.pushNamed(context, AppRoutes.auth, arguments: destAfterAuth);
     }
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app/routes.dart';
 import '../providers/app_state.dart';
 
@@ -41,26 +41,29 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     try {
       if (_isSignUp) {
-        final cred = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(email: email, password: password);
-        final name = _nameCtrl.text.trim();
-        if (name.isNotEmpty) {
-          await cred.user?.updateDisplayName(name);
-        }
+        final res = await Supabase.instance.client.auth.signUp(
+          email: email, 
+          password: password,
+          data: {'full_name': _nameCtrl.text.trim()},
+        );
       } else {
-        await FirebaseAuth.instance
-            .signInWithEmailAndPassword(email: email, password: password);
+        await Supabase.instance.client.auth.signInWithPassword(
+          email: email, 
+          password: password
+        );
       }
       if (mounted) {
         Provider.of<AppState>(context, listen: false).setAuthenticated(true);
-        // New sign-ups go to language select; returning users go straight home
-        final dest = _isSignUp ? AppRoutes.languageSelect : AppRoutes.home;
+        // Honor a post-auth destination passed by role select (e.g. workerProfile).
+        // Otherwise: new sign-ups → language select, returning users → home.
+        final routeArg = ModalRoute.of(context)?.settings.arguments as String?;
+        final dest = routeArg ?? (_isSignUp ? AppRoutes.languageSelect : AppRoutes.home);
         Navigator.pushReplacementNamed(context, dest);
       }
-    } on FirebaseAuthException catch (e) {
+    } on AuthException catch (e) {
       setState(() {
         _isLoading = false;
-        _error = _friendlyError(e.code);
+        _error = e.message;
       });
     } catch (_) {
       setState(() { _isLoading = false; _error = 'Something went wrong. Try again.'; });

@@ -52,3 +52,5 @@ backend/audit-*.md
 backend/got-receipt*
 backend/*.tmp
 backend/scratch/
+backend.err.log
+backend.out.log

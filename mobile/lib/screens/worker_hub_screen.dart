@@ -1,7 +1,11 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../app/routes.dart';
+import '../constants/strings.dart';
+import '../models/booking.dart';
+import '../providers/app_state.dart';
 
 class WorkerHubScreen extends StatefulWidget {
   const WorkerHubScreen({super.key});
@@ -11,8 +15,85 @@ class WorkerHubScreen extends StatefulWidget {
 
 class _WorkerHubScreenState extends State<WorkerHubScreen> {
   bool _isAvailable = true;
+  List<Booking> _jobs = [];
+  bool _loadingJobs = true;
+  Map<String, dynamic> _stats = {};
   static const _teal = Color(0xFF075E54);
   static const _green = Color(0xFF25D366);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAll();
+  }
+
+  Future<void> _loadAll() async {
+    final state = Provider.of<AppState>(context, listen: false);
+    final results = await Future.wait([
+      state.loadWorkerJobs(),
+      state.loadWorkerStats(),
+    ]);
+    if (mounted) setState(() {
+      _jobs = results[0] as List<Booking>;
+      _stats = results[1] as Map<String, dynamic>;
+      _loadingJobs = false;
+    });
+  }
+
+  String _fmt(int v) {
+    if (v < 1000) return v.toString();
+    final s = v.toString();
+    final out = StringBuffer();
+    final remainder = s.length % 3;
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (i - remainder) % 3 == 0) out.write(',');
+      out.write(s[i]);
+    }
+    return out.toString();
+  }
+
+  Future<void> _toggleAvailable() async {
+    setState(() => _isAvailable = !_isAvailable);
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid != null) {
+        await Supabase.instance.client
+            .from('worker_profiles')
+            .update({'is_online': _isAvailable})
+            .eq('id', uid);
+      }
+    } catch (e) {
+      // Silently keep local state — server can resync next refresh
+    }
+  }
+
+  String _humanService(String t) {
+    switch (t) {
+      case 'plumber': return 'Plumbing';
+      case 'electrician': return 'Electrical';
+      case 'ac_technician': return 'AC / HVAC';
+      case 'carpenter': return 'Carpentry';
+      case 'painter': return 'Painting';
+      case 'cleaner': return 'Cleaning';
+      case 'handyman': return 'General Repair';
+      case 'appliance_repair': return 'Appliance Repair';
+      case 'locksmith': return 'Locksmith';
+      default: return t.isEmpty ? 'Service' : t;
+    }
+  }
+
+  IconData _iconForService(String t) {
+    switch (t) {
+      case 'plumber': return Icons.plumbing;
+      case 'electrician': return Icons.electrical_services;
+      case 'ac_technician': return Icons.ac_unit;
+      case 'carpenter': return Icons.carpenter;
+      case 'painter': return Icons.format_paint;
+      case 'cleaner': return Icons.cleaning_services;
+      case 'handyman': return Icons.handyman;
+      default: return Icons.work_outline;
+    }
+  }
   static const _bg = Color(0xFFF7F8FA);
   static const _textDark = Color(0xFF111B21);
   static const _textGrey = Color(0xFF8696A0);
@@ -35,9 +116,9 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
                 SafeArea(bottom: false, child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                   child: Builder(builder: (context) {
-                    final user = FirebaseAuth.instance.currentUser;
-                    final name = user?.displayName ?? user?.email?.split('@').first ?? 'Worker';
-                    final photoUrl = user?.photoURL;
+                    final user = Supabase.instance.client.auth.currentUser;
+                    final name = user?.userMetadata?['full_name'] ?? user?.email?.split('@').first ?? 'Worker';
+                    final photoUrl = user?.userMetadata?['avatar_url'];
                     return Row(children: [
                     // Avatar
                     Stack(children: [
@@ -60,7 +141,7 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
                     ])),
                     // Online toggle
                     GestureDetector(
-                      onTap: () => setState(() => _isAvailable = !_isAvailable),
+                      onTap: _toggleAvailable,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         width: 52, height: 28,
@@ -108,16 +189,20 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
                             child: Image.asset('assets/images/pak_bg.png', width: 120,
                               errorBuilder: (_, __, ___) => const SizedBox()))),
                         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Today\'s Earnings', style: TextStyle(color: Colors.white60, fontSize: 13)),
+                          Text(Strings.of(context).earningsToday, style: const TextStyle(color: Colors.white60, fontSize: 13)),
                           const SizedBox(height: 6),
-                          const Text('PKR 4,500', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800)),
+                          Text('PKR ${_fmt((_stats['todayEarnings'] ?? 0) as int)}',
+                              style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800)),
                           const SizedBox(height: 20),
                           Row(children: [
-                            _EarningChip(label: 'This Week', value: 'PKR 22,750'),
+                            _EarningChip(label: Strings.of(context).thisWeek, value: 'PKR ${_fmt((_stats['weekEarnings'] ?? 0) as int)}'),
                             const SizedBox(width: 16),
-                            _EarningChip(label: 'Jobs Today', value: '3 Completed'),
+                            _EarningChip(label: Strings.of(context).jobsToday, value: '${_stats['jobsToday'] ?? 0}'),
                             const SizedBox(width: 16),
-                            _EarningChip(label: 'Rating', value: '4.9 ⭐'),
+                            _EarningChip(label: Strings.of(context).rating,
+                                value: ((_stats['totalReviews'] ?? 0) as int) == 0
+                                    ? 'New ⭐'
+                                    : '${((_stats['rating'] ?? 0.0) as double).toStringAsFixed(1)} ⭐'),
                           ]),
                         ]),
                       ],
@@ -128,32 +213,43 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
 
                   // Active Requests header
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    const Text('Active Requests', style: TextStyle(color: _textDark, fontSize: 17, fontWeight: FontWeight.w800)),
+                    Text(Strings.of(context).activeRequests, style: const TextStyle(color: _textDark, fontSize: 17, fontWeight: FontWeight.w800)),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(color: const Color(0xFFE8F5EF), borderRadius: BorderRadius.circular(12)),
-                      child: const Text('3 New', style: TextStyle(color: _teal, fontSize: 12, fontWeight: FontWeight.w700)),
+                      child: Text('${_jobs.where((j) => !j.isCompleted && !j.isCancelled).length} New',
+                        style: const TextStyle(color: _teal, fontSize: 12, fontWeight: FontWeight.w700)),
                     ),
                   ]).animate().fadeIn(delay: 200.ms),
                   const SizedBox(height: 12),
 
-                  _JobCard(
-                    service: 'Pipe Leaking', serviceIcon: Icons.plumbing, area: 'Gulberg III',
-                    distance: '2.3 km', budget: 'PKR 1,500–2,000', time: '2 min ago',
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.workerJobRequest),
-                  ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.05),
-                  const SizedBox(height: 12),
-                  _JobCard(
-                    service: 'Bathroom Fitting', serviceIcon: Icons.bathroom, area: 'DHA Phase 5',
-                    distance: '4.1 km', budget: 'PKR 3,000–4,500', time: '8 min ago',
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.workerJobRequest),
-                  ).animate().fadeIn(delay: 400.ms).slideX(begin: -0.05),
-                  const SizedBox(height: 12),
-                  _JobCard(
-                    service: 'Water Heater Install', serviceIcon: Icons.water_damage, area: 'Model Town',
-                    distance: '3.5 km', budget: 'PKR 2,500–3,500', time: '15 min ago',
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.workerJobRequest),
-                  ).animate().fadeIn(delay: 500.ms).slideX(begin: -0.05),
+                  if (_loadingJobs)
+                    const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: _teal)))
+                  else if (_jobs.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE4E6EB))),
+                      child: const Column(children: [
+                        Icon(Icons.inbox_outlined, size: 36, color: _textGrey),
+                        SizedBox(height: 8),
+                        Text('No job requests yet', style: TextStyle(color: _textDark, fontWeight: FontWeight.w600)),
+                        SizedBox(height: 4),
+                        Text('Stay online — new jobs will appear here', style: TextStyle(color: _textGrey, fontSize: 12)),
+                      ]),
+                    )
+                  else
+                    ..._jobs.take(10).map((j) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _JobCard(
+                        service: _humanService(j.serviceType),
+                        serviceIcon: _iconForService(j.serviceType),
+                        area: j.displayDate.isNotEmpty ? j.displayDate : 'Scheduled',
+                        distance: j.status,
+                        budget: j.displayCost,
+                        time: 'Booking ${j.id.length > 6 ? j.id.substring(0, 6) : j.id}',
+                        onTap: () => Navigator.pushNamed(context, AppRoutes.workerJobRequest),
+                      ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.05),
+                    )),
 
                   const SizedBox(height: 24),
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../app/routes.dart';
+import '../providers/app_state.dart';
 
 class WorkerSkillSelectionScreen extends StatefulWidget {
   const WorkerSkillSelectionScreen({super.key});
@@ -12,22 +14,35 @@ class _WorkerSkillSelectionScreenState extends State<WorkerSkillSelectionScreen>
   final Set<String> _selectedSkills = {};
   double _hourlyRate = 750;
 
+  @override
+  void initState() {
+    super.initState();
+    final appState = Provider.of<AppState>(context, listen: false);
+    final data = appState.workerRegistrationData;
+    _selectedSkills.addAll(data.skills);
+    _hourlyRate = data.hourlyRate;
+  }
+
   static const _teal = Color(0xFF075E54);
   static const _green = Color(0xFF25D366);
   static const _bg = Color(0xFFF7F8FA);
   static const _textDark = Color(0xFF111B21);
   static const _textGrey = Color(0xFF8696A0);
 
+  // `value` MUST match the Supabase `service_category` enum (used by
+  // worker_profiles.skills[] and bookings.service_type). Customer-side
+  // category cards query by these exact strings.
   final _skills = [
-    {'icon': Icons.plumbing, 'label': 'Plumbing', 'urdu': 'پلمبنگ'},
-    {'icon': Icons.electrical_services, 'label': 'Electrical', 'urdu': 'الیکٹریشن'},
-    {'icon': Icons.ac_unit, 'label': 'AC / HVAC', 'urdu': 'اے سی'},
-    {'icon': Icons.carpenter, 'label': 'Carpentry', 'urdu': 'بڑھئی'},
-    {'icon': Icons.format_paint, 'label': 'Painting', 'urdu': 'رنگ و روغن'},
-    {'icon': Icons.cleaning_services, 'label': 'Cleaning', 'urdu': 'صفائی'},
-    {'icon': Icons.roofing, 'label': 'Roofing', 'urdu': 'چھت'},
-    {'icon': Icons.handyman, 'label': 'General Repair', 'urdu': 'مرمت'},
-    {'icon': Icons.water_damage, 'label': 'Waterproofing', 'urdu': 'واٹرپروفنگ'},
+    {'icon': Icons.plumbing,            'label': 'Plumbing',       'urdu': 'پلمبنگ',     'value': 'plumber'},
+    {'icon': Icons.electrical_services, 'label': 'Electrical',     'urdu': 'الیکٹریشن', 'value': 'electrician'},
+    {'icon': Icons.ac_unit,             'label': 'AC / HVAC',      'urdu': 'اے سی',     'value': 'ac_technician'},
+    {'icon': Icons.carpenter,           'label': 'Carpentry',      'urdu': 'بڑھئی',     'value': 'carpenter'},
+    {'icon': Icons.format_paint,        'label': 'Painting',       'urdu': 'رنگ و روغن','value': 'painter'},
+    {'icon': Icons.cleaning_services,   'label': 'Cleaning',       'urdu': 'صفائی',     'value': 'cleaner'},
+    {'icon': Icons.foundation,          'label': 'Masonry',        'urdu': 'راج گیر',    'value': 'mason'},
+    {'icon': Icons.local_fire_department,'label': 'Welding',       'urdu': 'ویلڈنگ',     'value': 'welder'},
+    {'icon': Icons.bug_report,          'label': 'Pest Control',   'urdu': 'کیڑے مار',   'value': 'pest_control'},
+    {'icon': Icons.build,               'label': 'Appliance Repair','urdu': 'مرمت',     'value': 'appliance_repair'},
   ];
 
   @override
@@ -93,10 +108,11 @@ class _WorkerSkillSelectionScreenState extends State<WorkerSkillSelectionScreen>
                       final label = skill['label'] as String;
                       final icon = skill['icon'] as IconData;
                       final urdu = skill['urdu'] as String;
-                      final isSelected = _selectedSkills.contains(label);
+                      final value = skill['value'] as String;
+                      final isSelected = _selectedSkills.contains(value);
                       return GestureDetector(
                         onTap: () => setState(() {
-                          if (isSelected) _selectedSkills.remove(label); else _selectedSkills.add(label);
+                          if (isSelected) _selectedSkills.remove(value); else _selectedSkills.add(value);
                         }),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
@@ -174,7 +190,12 @@ class _WorkerSkillSelectionScreenState extends State<WorkerSkillSelectionScreen>
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: _selectedSkills.isNotEmpty
-                          ? () => Navigator.pushNamed(context, AppRoutes.workerArea)
+                          ? () {
+                              final appState = Provider.of<AppState>(context, listen: false);
+                              appState.workerRegistrationData.skills = _selectedSkills;
+                              appState.workerRegistrationData.hourlyRate = _hourlyRate;
+                              Navigator.pushNamed(context, AppRoutes.workerArea);
+                            }
                           : null,
                       icon: const Icon(Icons.arrow_forward, size: 18),
                       label: Text(

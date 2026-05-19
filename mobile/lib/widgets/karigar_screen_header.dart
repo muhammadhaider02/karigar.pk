@@ -4,7 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 /// Shared top-header used on Login, Role Selection, and Language screens.
 /// Shows the Pakistan monument photo with a teal gradient overlay,
-/// Karigar logo, "KARGAR AI" text + tagline.
+/// Karigar logo, "KARIGAR AI" text + tagline.
 class KarigarScreenHeader extends StatelessWidget {
   final double height;
   const KarigarScreenHeader({super.key, this.height = 280});
@@ -106,11 +106,11 @@ class KarigarScreenHeader extends StatelessWidget {
 
                   const SizedBox(height: 10),
 
-                  // KARGAR AI
+                  // KARIGAR AI
                   RichText(
                     text: const TextSpan(children: [
                       TextSpan(
-                        text: 'KARGAR ',
+                        text: 'KARIGAR ',
                         style: TextStyle(
                           fontSize: 24, fontWeight: FontWeight.w800,
                           color: Color(0xFF075E54), letterSpacing: 1.5,

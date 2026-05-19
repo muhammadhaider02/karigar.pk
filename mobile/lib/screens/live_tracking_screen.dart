@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 import '../app/routes.dart';
+import '../providers/app_state.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
   const LiveTrackingScreen({super.key});
@@ -15,16 +17,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
   static const _teal  = Color(0xFF075E54);
   static const _green = Color(0xFF25D366);
 
-  static final _workerPos = LatLng(33.7215, 73.0433);
-  static final _homePos   = LatLng(33.7295, 73.0551);
-  static final _center    = LatLng(33.7255, 73.0490);
-  static final _routePoints = [
-    _workerPos,
-    LatLng(33.7230, 73.0450),
-    LatLng(33.7245, 73.0495),
-    LatLng(33.7275, 73.0520),
-    _homePos,
-  ];
+  // Real pins computed from booking + customer GPS (set in build).
+  late LatLng _workerPos;
+  late LatLng _homePos;
+  late LatLng _center;
+  late List<LatLng> _routePoints;
+  double _distanceKm = 0;
 
   int _currentStatus = 1;
   late AnimationController _pulseCtrl;
@@ -39,6 +37,34 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
     Future.delayed(const Duration(seconds: 18), () { if (mounted) setState(() => _currentStatus = 4); });
   }
 
+  void _computeRoute(AppState st) {
+    // Worker home: from the selected provider; Customer home: from AppState GPS
+    final wLat = st.selectedProvider?.lat ?? 33.7215;
+    final wLng = st.selectedProvider?.lng ?? 73.0433;
+    final cLat = st.customerLat ?? 33.7295;
+    final cLng = st.customerLng ?? 73.0551;
+    _workerPos = LatLng(wLat, wLng);
+    _homePos   = LatLng(cLat, cLng);
+    _center    = LatLng((wLat + cLat) / 2, (wLng + cLng) / 2);
+    _distanceKm = AppState.haversineKm(wLat, wLng, cLat, cLng);
+    _routePoints = [_workerPos, _homePos];
+  }
+
+  String _formatSlot(DateTime? dt) {
+    if (dt == null) return 'Now (ASAP)';
+    final n = DateTime.now();
+    final today = DateTime(n.year, n.month, n.day);
+    final d = DateTime(dt.year, dt.month, dt.day);
+    final h = dt.hour;
+    final period = h >= 12 ? 'PM' : 'AM';
+    final hr = h % 12 == 0 ? 12 : h % 12;
+    final time = '$hr:${dt.minute.toString().padLeft(2, '0')} $period';
+    if (d == today) return 'Aaj $time';
+    if (d == today.add(const Duration(days: 1))) return 'Kal $time';
+    if (d == today.add(const Duration(days: 2))) return 'Parso $time';
+    return '${dt.day}/${dt.month} $time';
+  }
+
   @override
   void dispose() {
     _pulseCtrl.dispose();
@@ -47,6 +73,15 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
 
   @override
   Widget build(BuildContext context) {
+    final st = Provider.of<AppState>(context);
+    _computeRoute(st);
+    final booking = st.currentBooking;
+    final slotIso = booking?.slotStart;
+    DateTime? slotDt;
+    if (slotIso != null && slotIso.isNotEmpty) {
+      slotDt = DateTime.tryParse(slotIso)?.toLocal();
+    }
+    final etaMin = (_distanceKm / 30 * 60).round(); // ~30km/h urban
     return Scaffold(
       body: Stack(
         children: [
@@ -135,17 +170,21 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Estimated Arrival', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
-                          Text('12 Mins', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _teal)),
+                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Estimated Arrival', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
+                          Text('${etaMin == 0 ? 1 : etaMin} mins',
+                              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _teal)),
+                          Text('Distance: ${_distanceKm.toStringAsFixed(1)} km',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF8696A0))),
                         ]),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(color: const Color(0xFFE8F5EF), borderRadius: BorderRadius.circular(20)),
-                          child: const Row(children: [
-                            Icon(Icons.schedule, color: _teal, size: 14),
-                            SizedBox(width: 4),
-                            Text('On time', style: TextStyle(color: _teal, fontSize: 12, fontWeight: FontWeight.w600)),
+                          child: Row(children: [
+                            const Icon(Icons.schedule, color: _teal, size: 14),
+                            const SizedBox(width: 4),
+                            Text('Slot: ${_formatSlot(slotDt)}',
+                                style: const TextStyle(color: _teal, fontSize: 11, fontWeight: FontWeight.w700)),
                           ]),
                         ),
                       ],

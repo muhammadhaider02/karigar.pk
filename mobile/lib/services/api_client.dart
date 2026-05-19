@@ -8,12 +8,8 @@ import 'sse_stub.dart' if (dart.library.html) 'sse_web.dart' as sse;
 class KarigarApiClient {
   static String get baseUrl {
     if (kIsWeb) return 'http://127.0.0.1:8000';
-    // Android emulator routes host loopback through 10.0.2.2
-    // Override for physical device: --dart-define=API_BASE_URL=http://<host>:8000
-    return const String.fromEnvironment(
-      'API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:8000',
-    );
+    // Physical Pixel 8 Pro on same WiFi as PC
+    return 'http://192.168.1.12:8000';
   }
 
   final http.Client _client = http.Client();

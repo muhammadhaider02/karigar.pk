@@ -1,10 +1,12 @@
 import 'dart:io';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../app/routes.dart';
 import '../providers/app_state.dart';
@@ -41,7 +43,11 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       final pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.low));
-      // Reverse geocode label with coords
+      // Make the GPS available to AppState so booking + provider distance use it
+      if (mounted) {
+        Provider.of<AppState>(context, listen: false)
+            .setCustomerLocation(pos.latitude, pos.longitude);
+      }
       setState(() => _locationLabel = '${pos.latitude.toStringAsFixed(3)}, ${pos.longitude.toStringAsFixed(3)}');
     } catch (_) {
       setState(() => _locationLabel = 'Islamabad, Pakistan');
@@ -58,6 +64,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void _submitServiceQuery(String query) {
     Provider.of<AppState>(context, listen: false).startBookingFlow(query);
     Navigator.pushNamed(context, AppRoutes.agentTrace);
+  }
+
+  // Tap a category card → fetch all registered workers of that service from Supabase
+  // and go straight to the provider list (skip the AI agent flow).
+  void _openCategory(String supabaseService) {
+    final state = Provider.of<AppState>(context, listen: false);
+    state.loadWorkersByService(supabaseService).then((_) {
+      if (!mounted) return;
+      Navigator.pushNamed(context, AppRoutes.providerSelect);
+    });
   }
 
   @override
@@ -217,7 +233,75 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ).animate().fadeIn(delay: 350.ms).scaleXY(begin: 0.95),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
+
+                  // ── Live location mini-map ───────────────────────────
+                  Consumer<AppState>(builder: (_, st, __) {
+                    final lat = st.customerLat;
+                    final lng = st.customerLng;
+                    if (lat == null || lng == null) {
+                      return Container(
+                        height: 140,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F0E8),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Center(
+                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.gps_not_fixed, color: Color(0xFF8696A0), size: 18),
+                            SizedBox(width: 8),
+                            Text('Waiting for GPS…', style: TextStyle(color: Color(0xFF8696A0))),
+                          ]),
+                        ),
+                      );
+                    }
+                    final me = LatLng(lat, lng);
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: SizedBox(
+                        height: 160,
+                        child: Stack(children: [
+                          FlutterMap(
+                            options: MapOptions(
+                              initialCenter: me, initialZoom: 15,
+                              interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+                            ),
+                            children: [
+                              TileLayer(
+                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName: 'com.karigar.ai', maxZoom: 19,
+                              ),
+                              MarkerLayer(markers: [
+                                Marker(point: me, width: 44, height: 44, child: Container(
+                                  decoration: BoxDecoration(color: const Color(0xFF25D366), shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 3),
+                                    boxShadow: [BoxShadow(color: const Color(0xFF25D366).withValues(alpha: 0.5), blurRadius: 10)]),
+                                  child: const Icon(Icons.person_pin_circle, color: Colors.white, size: 22),
+                                )),
+                              ]),
+                            ],
+                          ),
+                          Positioned(
+                            left: 12, bottom: 12,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6)]),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                const Icon(Icons.my_location, size: 14, color: Color(0xFF075E54)),
+                                const SizedBox(width: 6),
+                                Text('Your location · $_locationLabel',
+                                    style: const TextStyle(fontSize: 11, color: Color(0xFF111B21), fontWeight: FontWeight.w600)),
+                              ]),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    );
+                  }).animate().fadeIn(delay: 400.ms),
+
+                  const SizedBox(height: 24),
 
                   // Grid
                   GridView.count(
@@ -231,31 +315,31 @@ class _HomeScreenState extends State<HomeScreen> {
                       _CategoryCard(
                         icon: Icons.electric_bolt, color: const Color(0xFF075E54),
                         title: 'Electrician', subtitle: 'Wiring, Fixing & More',
-                        onTap: () => _submitServiceQuery('electrician'),
+                        onTap: () => _openCategory('electrician'),
                         delay: 450,
                       ),
                       _CategoryCard(
                         icon: Icons.plumbing, color: const Color(0xFF1976D2),
                         title: 'Plumber', subtitle: 'Pipes, Leaks & More',
-                        onTap: () => _submitServiceQuery('plumber'),
+                        onTap: () => _openCategory('plumber'),
                         delay: 550,
                       ),
                       _CategoryCard(
                         icon: Icons.ac_unit, color: const Color(0xFFE65100),
                         title: 'AC Repair', subtitle: 'Cooling Solutions',
-                        onTap: () => _submitServiceQuery('ac repair'),
+                        onTap: () => _openCategory('ac_technician'),
                         delay: 650,
                       ),
                       _CategoryCard(
                         icon: Icons.cleaning_services, color: const Color(0xFF673AB7),
                         title: 'Cleaning', subtitle: 'Home & Office',
-                        onTap: () => _submitServiceQuery('cleaning'),
+                        onTap: () => _openCategory('cleaner'),
                         delay: 750,
                       ),
                       _CategoryCard(
                         icon: Icons.carpenter, color: const Color(0xFF8D6E63),
                         title: 'Carpenter', subtitle: 'Woodwork & Fixing',
-                        onTap: () => _submitServiceQuery('carpenter'),
+                        onTap: () => _openCategory('carpenter'),
                         delay: 850,
                       ),
                       _CategoryCard(
@@ -470,6 +554,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: double.infinity,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
+                      image: const DecorationImage(
+                        image: AssetImage('assets/images/map_placeholder.png'), // Will add a fallback color if asset missing
+                        fit: BoxFit.cover,
+                      ),
                       color: const Color(0xFFE8F5EF),
                       boxShadow: [
                         BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
@@ -601,9 +689,12 @@ class _ProfilePanelState extends State<_ProfilePanel> {
     final grey  = isDark ? const Color(0xFF8EAAA6)  : const Color(0xFF8696A0);
     final border = isDark ? const Color(0xFF2E4A47) : const Color(0xFFE4E6EB);
 
-    final firebaseUser = FirebaseAuth.instance.currentUser;
-    final displayName  = firebaseUser?.displayName ?? firebaseUser?.email?.split('@').first ?? (user ? 'Signed In' : 'Guest User');
-    final emailLabel   = firebaseUser?.email ?? (user ? 'Firebase Auth' : 'Not authenticated');
+    final supabaseUser = Supabase.instance.client.auth.currentUser;
+    final displayName = supabaseUser?.userMetadata?['full_name'] as String? ?? 
+                        supabaseUser?.email?.split('@').first ?? 
+                        supabaseUser?.phone ?? 
+                        (user ? 'Signed In' : 'Guest User');
+    final emailLabel = supabaseUser?.email ?? supabaseUser?.phone ?? (user ? 'Supabase Auth' : 'Not authenticated');
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -693,7 +784,7 @@ class _ProfilePanelState extends State<_ProfilePanel> {
                 _SettingRow(icon: Icons.logout, iconColor: const Color(0xFFDC2626), label: 'Sign Out',
                   textColor: const Color(0xFFDC2626), subtitleColor: grey,
                   onTap: () async {
-                    await FirebaseAuth.instance.signOut();
+                    await Supabase.instance.client.auth.signOut();
                     if (context.mounted) {
                       Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (_) => false);
                     }

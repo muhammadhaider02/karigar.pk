@@ -2,7 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
 import '../app/routes.dart';
+import '../providers/app_state.dart';
 
 class WorkerProfileSetupScreen extends StatefulWidget {
   const WorkerProfileSetupScreen({super.key});
@@ -15,6 +18,35 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   File? _profilePhoto;
   final _picker = ImagePicker();
+  
+  late TextEditingController _nameController;
+  late TextEditingController _phoneController;
+  late TextEditingController _cnicController;
+  late TextEditingController _addressController;
+  late TextEditingController _districtController;
+
+  @override
+  void initState() {
+    super.initState();
+    final appState = Provider.of<AppState>(context, listen: false);
+    final data = appState.workerRegistrationData;
+    _nameController = TextEditingController(text: data.fullName);
+    _phoneController = TextEditingController(text: data.phone);
+    _cnicController = TextEditingController(text: data.cnic);
+    _addressController = TextEditingController(text: data.address);
+    _districtController = TextEditingController(text: data.district);
+    _profilePhoto = data.profilePhoto;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _cnicController.dispose();
+    _addressController.dispose();
+    _districtController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickProfilePhoto() async {
     showModalBottomSheet(
@@ -47,6 +79,59 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
         ]),
       ),
     );
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location services are disabled.')),
+          );
+        }
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Location permissions are denied')),
+            );
+          }
+          return;
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permissions are permanently denied.')),
+          );
+        }
+        return;
+      } 
+
+      final position = await Geolocator.getCurrentPosition();
+      final appState = Provider.of<AppState>(context, listen: false);
+      appState.workerRegistrationData.homeLat = position.latitude;
+      appState.workerRegistrationData.homeLng = position.longitude;
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location fetched successfully!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error getting location: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -202,7 +287,12 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
                                   const SizedBox(height: 24),
 
                                   _buildLabel('Full Name'),
-                                  _buildTextField(hint: 'Enter your full name', icon: Icons.person_outline),
+                                  _buildTextField(
+                                    hint: 'Enter your full name',
+                                    icon: Icons.person_outline,
+                                    controller: _nameController,
+                                    validator: (v) => v == null || v.isEmpty ? 'Name is required' : null,
+                                  ),
 
                                   const SizedBox(height: 20),
                                   _buildLabel('Profile Photo'),
@@ -282,35 +372,34 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
                                       ),
                                       const SizedBox(width: 12),
                                       Expanded(
-                                        child: _buildTextField(hint: '300 1234567'),
+                                        child: _buildTextField(
+                                          hint: '300 1234567',
+                                          controller: _phoneController,
+                                          keyboardType: TextInputType.phone,
+                                          validator: (v) => v == null || v.isEmpty ? 'Phone number is required' : null,
+                                        ),
                                       ),
                                     ],
                                   ),
 
                                   const SizedBox(height: 20),
                                   _buildLabel('CNIC / ID Number'),
-                                  _buildTextField(hint: 'XXXXX-XXXXXXX-X', icon: Icons.badge_outlined, suffixIcon: Icons.info_outline),
+                                  _buildTextField(
+                                    hint: 'XXXXX-XXXXXXX-X',
+                                    icon: Icons.badge_outlined,
+                                    suffixIcon: Icons.info_outline,
+                                    controller: _cnicController,
+                                    keyboardType: TextInputType.number,
+                                    validator: (v) => v == null || v.isEmpty ? 'CNIC is required' : null,
+                                  ),
 
                                   const SizedBox(height: 20),
                                   _buildLabel('District'),
-                                  Container(
-                                    height: 52,
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: const Color(0xFFE4E6EB)),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.location_on_outlined, color: Color(0xFF075E54), size: 20),
-                                        const SizedBox(width: 12),
-                                        const Expanded(
-                                          child: Text('Select your district', style: TextStyle(color: Color(0xFF8696A0), fontSize: 14)),
-                                        ),
-                                        const Icon(Icons.keyboard_arrow_down, color: Color(0xFF8696A0)),
-                                      ],
-                                    ),
+                                  _buildTextField(
+                                    hint: 'Enter your district',
+                                    icon: Icons.location_on_outlined,
+                                    controller: _districtController,
+                                    validator: (v) => v == null || v.isEmpty ? 'District is required' : null,
                                   ),
 
                                   const SizedBox(height: 20),
@@ -332,6 +421,7 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: TextFormField(
+                                            controller: _addressController,
                                             maxLines: 2,
                                             style: const TextStyle(fontSize: 14),
                                             decoration: const InputDecoration.collapsed(
@@ -341,6 +431,18 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
                                           ),
                                         ),
                                       ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ElevatedButton.icon(
+                                    onPressed: _getCurrentLocation,
+                                    icon: const Icon(Icons.my_location),
+                                    label: const Text('Get Current Location'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFF7F8FA),
+                                      foregroundColor: const Color(0xFF075E54),
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                     ),
                                   ),
 
@@ -386,7 +488,19 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
         child: SizedBox(
           height: 56,
           child: ElevatedButton(
-            onPressed: () => Navigator.pushNamed(context, AppRoutes.workerSkills),
+            onPressed: () {
+              if (_formKey.currentState!.validate()) {
+                final appState = Provider.of<AppState>(context, listen: false);
+                appState.workerRegistrationData.fullName = _nameController.text;
+                appState.workerRegistrationData.phone = _phoneController.text;
+                appState.workerRegistrationData.cnic = _cnicController.text;
+                appState.workerRegistrationData.address = _addressController.text;
+                appState.workerRegistrationData.district = _districtController.text;
+                appState.workerRegistrationData.profilePhoto = _profilePhoto;
+                
+                Navigator.pushNamed(context, AppRoutes.workerSkills);
+              }
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF075E54),
               foregroundColor: Colors.white,
@@ -417,9 +531,9 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
     );
   }
 
-  Widget _buildTextField({required String hint, IconData? icon, IconData? suffixIcon}) {
+  Widget _buildTextField({required String hint, IconData? icon, IconData? suffixIcon, TextEditingController? controller, String? Function(String?)? validator, TextInputType? keyboardType}) {
     return Container(
-      height: 52,
+      constraints: const BoxConstraints(minHeight: 52),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -427,6 +541,7 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
         border: Border.all(color: const Color(0xFFE4E6EB)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (icon != null) ...[
             Icon(icon, color: const Color(0xFF8696A0), size: 20),
@@ -434,10 +549,15 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
           ],
           Expanded(
             child: TextFormField(
+              controller: controller,
+              validator: validator,
+              keyboardType: keyboardType,
               style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration.collapsed(
+              decoration: InputDecoration(
                 hintText: hint,
                 hintStyle: const TextStyle(color: Color(0xFF8696A0)),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
           ),

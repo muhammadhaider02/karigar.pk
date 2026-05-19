@@ -1,19 +1,94 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class MessagesScreen extends StatelessWidget {
+class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
+  @override
+  State<MessagesScreen> createState() => _MessagesScreenState();
+}
 
+class _MessagesScreenState extends State<MessagesScreen> {
   static const _teal  = Color(0xFF075E54);
+  // ignore: unused_field
   static const _green = Color(0xFF25D366);
 
-  static const _chats = [
-    _ChatPreview(name: 'Ali AC Services',    msg: 'On my way, 10 mins',         time: '2m',  unread: 2,  avatar: 'AA'),
-    _ChatPreview(name: 'Faisal Plumbing',    msg: 'Job completed. Thank you!',  time: '1h',  unread: 0,  avatar: 'FP'),
-    _ChatPreview(name: 'Hassan Electrician', msg: 'Can we reschedule to 4pm?',  time: '3h',  unread: 1,  avatar: 'HE'),
-    _ChatPreview(name: 'Karigar Support',    msg: 'Your issue has been resolved',time: '1d', unread: 0,  avatar: 'KS'),
-    _ChatPreview(name: 'Waseem Carpenter',   msg: 'Material cost: PKR 2,500',   time: '2d',  unread: 0,  avatar: 'WC'),
-  ];
+  List<_ChatPreview> _chats = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChats();
+  }
+
+  Future<void> _loadChats() async {
+    final supa = Supabase.instance.client;
+    final uid = supa.auth.currentUser?.id;
+    if (uid == null) {
+      setState(() { _chats = []; _loading = false; });
+      return;
+    }
+    try {
+      // Pull bookings where I'm the customer OR the worker, with the other
+      // party's profile name attached via Postgres foreign-table joins.
+      final rows = await supa
+          .from('bookings')
+          .select('id, status, service_type, slot_time, created_at, customer_id, worker_id, '
+                  'customer:profiles!bookings_customer_id_fkey(full_name), '
+                  'worker:profiles!bookings_worker_id_fkey(full_name)')
+          .or('customer_id.eq.$uid,worker_id.eq.$uid')
+          .order('created_at', ascending: false)
+          .limit(30);
+
+      final list = <_ChatPreview>[];
+      for (final row in (rows as List)) {
+        final m = row as Map<String, dynamic>;
+        final iAmCustomer = m['customer_id'] == uid;
+        final other = (iAmCustomer ? m['worker'] : m['customer']);
+        final otherName = (other is Map && other['full_name'] is String && (other['full_name'] as String).isNotEmpty)
+            ? other['full_name'] as String
+            : (iAmCustomer ? 'Worker' : 'Customer');
+        final status = (m['status'] as String? ?? '').toUpperCase();
+        list.add(_ChatPreview(
+          name: otherName,
+          msg: _statusMessage(status, m['service_type'] as String? ?? ''),
+          time: _shortAgo(m['created_at'] as String? ?? ''),
+          unread: (status == 'WORKER_ASSIGNED' || status == 'EN_ROUTE') ? 1 : 0,
+          avatar: otherName.isNotEmpty ? otherName.trim().substring(0, 1).toUpperCase() : '?',
+        ));
+      }
+      // Always also include the support row.
+      list.add(const _ChatPreview(name: 'Karigar Support', msg: 'How can we help you today?', time: 'always', unread: 0, avatar: 'KS'));
+      if (mounted) setState(() { _chats = list; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _chats = [const _ChatPreview(name: 'Karigar Support', msg: 'How can we help?', time: 'now', unread: 0, avatar: 'KS')]; _loading = false; });
+    }
+  }
+
+  String _statusMessage(String status, String service) {
+    switch (status) {
+      case 'WORKER_ASSIGNED': return 'New booking assigned · $service';
+      case 'WORKER_ACCEPTED': return 'Worker accepted your booking';
+      case 'EN_ROUTE':        return 'Worker is on the way';
+      case 'ARRIVED':         return 'Worker has arrived';
+      case 'IN_PROGRESS':     return 'Service in progress';
+      case 'COMPLETED':       return 'Service completed · Rate your experience';
+      case 'CANCELLED':       return 'Booking cancelled';
+      default: return 'Tap to view booking · $service';
+    }
+  }
+
+  String _shortAgo(String iso) {
+    if (iso.isEmpty) return '';
+    final t = DateTime.tryParse(iso)?.toLocal();
+    if (t == null) return '';
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 1) return 'now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m';
+    if (d.inHours < 24)   return '${d.inHours}h';
+    return '${d.inDays}d';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,18 +99,25 @@ class MessagesScreen extends StatelessWidget {
         elevation: 0,
         title: const Text('Messages', style: TextStyle(color: Color(0xFF111B21), fontSize: 20, fontWeight: FontWeight.w800)),
         actions: [
-          IconButton(icon: const Icon(Icons.search, color: Color(0xFF111B21)), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.refresh, color: Color(0xFF111B21)), onPressed: _loadChats),
         ],
       ),
-      body: ListView.separated(
-        itemCount: _chats.length,
-        separatorBuilder: (_, __) => const Divider(height: 1, indent: 72, color: Color(0xFFF0F2F5)),
-        itemBuilder: (context, i) {
-          final chat = _chats[i];
-          return _ChatTile(chat: chat)
-              .animate().fadeIn(delay: Duration(milliseconds: i * 60)).slideX(begin: 0.05);
-        },
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: _teal))
+          : _chats.isEmpty
+              ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No conversations yet.\nBook a service to start chatting.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF8696A0)))))
+              : RefreshIndicator(
+                  onRefresh: _loadChats,
+                  child: ListView.separated(
+                    itemCount: _chats.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, indent: 72, color: Color(0xFFF0F2F5)),
+                    itemBuilder: (context, i) {
+                      final chat = _chats[i];
+                      return _ChatTile(chat: chat)
+                          .animate().fadeIn(delay: Duration(milliseconds: i * 60)).slideX(begin: 0.05);
+                    },
+                  ),
+                ),
     );
   }
 }

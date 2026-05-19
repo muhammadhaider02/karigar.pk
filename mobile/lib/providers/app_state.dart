@@ -1,5 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/provider_model.dart';
 import '../models/agent_event.dart';
 import '../models/booking.dart';
@@ -22,8 +23,9 @@ class AppState extends ChangeNotifier {
   }
 
   AppState() {
-    FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      _isAuthenticated = user != null;
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final session = data.session;
+      _isAuthenticated = session != null;
       notifyListeners();
     });
   }
@@ -66,11 +68,122 @@ class AppState extends ChangeNotifier {
   // ── API client ───────────────────────────────────────────────
   final KarigarApiClient _api = KarigarApiClient();
 
+  // ── Worker Registration ──────────────────────────────────────────
+  final WorkerRegistrationData workerRegistrationData = WorkerRegistrationData();
+  bool _isRegisteringWorker = false;
+  bool get isRegisteringWorker => _isRegisteringWorker;
+
+  Future<void> submitWorkerRegistration() async {
+    _isRegisteringWorker = true;
+    notifyListeners();
+    try {
+      final supa = Supabase.instance.client;
+      final uid = supa.auth.currentUser?.id;
+      if (uid == null) {
+        throw Exception('User must be logged in to register as a worker.');
+      }
+
+      String? avatarUrl;
+      if (workerRegistrationData.profilePhoto != null) {
+        final path = '$uid/avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await supa.storage.from('avatars').upload(path, workerRegistrationData.profilePhoto!);
+        avatarUrl = supa.storage.from('avatars').getPublicUrl(path);
+      }
+
+      String? cnicFrontUrl;
+      if (workerRegistrationData.cnicFront != null) {
+        final path = '$uid/front_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await supa.storage.from('cnic-documents').upload(path, workerRegistrationData.cnicFront!);
+        cnicFrontUrl = supa.storage.from('cnic-documents').getPublicUrl(path);
+      }
+
+      String? cnicBackUrl;
+      if (workerRegistrationData.cnicBack != null) {
+        final path = '$uid/back_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await supa.storage.from('cnic-documents').upload(path, workerRegistrationData.cnicBack!);
+        cnicBackUrl = supa.storage.from('cnic-documents').getPublicUrl(path);
+      }
+
+      // Optional proof-of-skill certificate
+      final List<String> proofOfSkillUrls = [];
+      if (workerRegistrationData.cert != null) {
+        final path = '$uid/cert_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await supa.storage.from('skill-proofs').upload(path, workerRegistrationData.cert!);
+        proofOfSkillUrls.add(supa.storage.from('skill-proofs').getPublicUrl(path));
+      }
+
+      // Update profile
+      await supa.from('profiles').update({
+        'role': 'worker',
+        if (workerRegistrationData.fullName.isNotEmpty) 'full_name': workerRegistrationData.fullName,
+        if (workerRegistrationData.phone.isNotEmpty) 'phone_number': workerRegistrationData.phone,
+        if (avatarUrl != null) 'profile_photo_url': avatarUrl,
+        if (workerRegistrationData.district.isNotEmpty) 'district': workerRegistrationData.district,
+      }).eq('id', uid);
+
+      // Upsert worker profile
+      // Schema NOT NULL: cnic_number, cnic_front_url, cnic_back_url, profile_photo_url,
+      //                  skills[], district, area, home_address, rate_per_hour, verification_status
+      final primaryArea = workerRegistrationData.areas.isNotEmpty
+          ? workerRegistrationData.areas.first
+          : workerRegistrationData.district;
+      await supa.from('worker_profiles').upsert({
+        'id': uid,
+        'cnic_number': workerRegistrationData.cnic,
+        'cnic_front_url': cnicFrontUrl,
+        'cnic_back_url': cnicBackUrl,
+        'profile_photo_url': avatarUrl,
+        'skills': workerRegistrationData.skills.toList(),
+        'rate_per_hour': workerRegistrationData.hourlyRate.toInt(),
+        'district': workerRegistrationData.district,
+        'area': primaryArea,
+        'home_address': workerRegistrationData.address,
+        'verification_status': 'pending',
+        if (proofOfSkillUrls.isNotEmpty) 'proof_of_skill_urls': proofOfSkillUrls,
+        if (workerRegistrationData.homeLat != null) 'home_lat': workerRegistrationData.homeLat,
+        if (workerRegistrationData.homeLng != null) 'home_lng': workerRegistrationData.homeLng,
+      });
+
+      // Insert service areas
+      if (workerRegistrationData.areas.isNotEmpty) {
+        final areaInserts = workerRegistrationData.areas.map((area) => {
+          'worker_id': uid,
+          'district': workerRegistrationData.district,
+          'area': area,
+          'is_primary': false,
+        }).toList();
+        await supa.from('worker_service_areas').insert(areaInserts);
+      }
+      
+    } catch (e) {
+      debugPrint('Error registering worker: $e');
+      rethrow;
+    } finally {
+      _isRegisteringWorker = false;
+      notifyListeners();
+    }
+  }
+
   // ── Methods ──────────────────────────────────────────────────
 
   void setLanguage(String lang) {
     _language = lang;
     notifyListeners();
+    // Persist to Supabase profiles.language so the AI agents (and the worker
+    // app) can use it too. Silently swallow errors — UX shouldn't block on this.
+    () async {
+      try {
+        final uid = Supabase.instance.client.auth.currentUser?.id;
+        if (uid != null) {
+          await Supabase.instance.client
+              .from('profiles')
+              .update({'language': lang})
+              .eq('id', uid);
+        }
+      } catch (e) {
+        debugPrint('Could not persist language: $e');
+      }
+    }();
   }
 
   void setAuthenticated(bool val) {
@@ -79,7 +192,32 @@ class AppState extends ChangeNotifier {
   }
 
   String get _userId =>
-      FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+      Supabase.instance.client.auth.currentUser?.id ?? 'anonymous';
+
+  // Fetch role + language from profiles for the signed-in user.
+  // Called by splash to decide which dashboard to route to.
+  Future<String?> fetchUserRole() async {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return null;
+      final rows = await Supabase.instance.client
+          .from('profiles')
+          .select('role, language')
+          .eq('id', uid)
+          .limit(1);
+      if (rows is List && rows.isNotEmpty) {
+        final m = rows.first as Map<String, dynamic>;
+        final lang = m['language'] as String?;
+        if (lang != null && lang.isNotEmpty) {
+          _language = lang;
+        }
+        return m['role'] as String?;
+      }
+    } catch (e) {
+      debugPrint('fetchUserRole failed: $e');
+    }
+    return null;
+  }
 
   Future<void> startBookingFlow(String query) async {
     _currentQuery = query;
@@ -181,9 +319,62 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void confirmBooking(ProviderModel provider) {
+  // Customer-chosen time slot for the next booking. Null = "now/ASAP".
+  DateTime? _bookingSlot;
+  DateTime? get bookingSlot => _bookingSlot;
+  void setBookingSlot(DateTime? when) {
+    _bookingSlot = when;
+    notifyListeners();
+  }
+
+  Future<void> confirmBooking(ProviderModel provider) async {
     _selectedProvider = provider;
     notifyListeners();
+
+    try {
+      final String code = 'BKG-${DateTime.now().millisecondsSinceEpoch}';
+      
+      // Clean up service type to match the Supabase `service_category` enum.
+      // Valid values: plumber, electrician, ac_technician, carpenter, painter,
+      //               cleaner, mason, welder, pest_control, appliance_repair
+      String serviceType = provider.serviceType.toLowerCase().replaceAll(' ', '_');
+      const validEnums = {
+        'plumber','electrician','ac_technician','carpenter','painter',
+        'cleaner','mason','welder','pest_control','appliance_repair',
+      };
+      if (!validEnums.contains(serviceType)) serviceType = 'plumber';
+
+      final slot = _bookingSlot ?? DateTime.now().add(const Duration(hours: 1));
+      // Determine urgency from how soon the slot is. <2h = high, <24h = medium, else low.
+      final hoursAway = slot.difference(DateTime.now()).inMinutes / 60;
+      final urgency = hoursAway < 2 ? 'high' : (hoursAway < 24 ? 'medium' : 'low');
+
+      final bookingData = {
+        'booking_code': code,
+        'customer_id': _userId,
+        'worker_id': provider.id,
+        'service_type': serviceType,
+        'description': _currentQuery,
+        'raw_input': _currentQuery,
+        'urgency': urgency,
+        'status': 'worker_assigned',
+        'price_estimate': provider.pricePerVisit,
+        'slot_time': slot.toUtc().toIso8601String(),
+        if (_customerLat != null) 'job_lat': _customerLat,
+        if (_customerLng != null) 'job_lng': _customerLng,
+      };
+
+      final response = await Supabase.instance.client
+          .from('bookings')
+          .insert(bookingData)
+          .select()
+          .single();
+
+      _currentBooking = Booking.fromJson(response);
+      await loadBookings();
+    } catch (e) {
+      debugPrint('Error confirming booking: $e');
+    }
   }
 
   // ── Booking history ──────────────────────────────────────────
@@ -192,10 +383,16 @@ class AppState extends ChangeNotifier {
     _isLoadingBookings = true;
     notifyListeners();
     try {
-      final raw = await _api.listBookings(_userId);
+      final response = await Supabase.instance.client
+          .from('bookings')
+          .select()
+          .eq('customer_id', _userId)
+          .order('created_at', ascending: false);
       _bookings
         ..clear()
-        ..addAll(raw.map(Booking.fromJson));
+        ..addAll((response as List).map((e) => Booking.fromJson(e as Map<String, dynamic>)));
+    } catch (e) {
+      debugPrint('Error loading bookings: $e');
     } finally {
       _isLoadingBookings = false;
       notifyListeners();
@@ -203,17 +400,231 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> cancelBooking(String bookingId, {bool rebook = false}) async {
-    await _api.cancelBooking(bookingId, rebook: rebook);
-    await loadBookings();
+    try {
+      await Supabase.instance.client
+          .from('bookings')
+          .update({'status': 'cancelled'})
+          .eq('id', bookingId);
+      await loadBookings();
+    } catch (e) {
+      debugPrint('Error cancelling booking: $e');
+    }
   }
 
   Future<void> markBookingArrived(String bookingId) async {
-    await _api.markArrived(bookingId);
-    await loadBookings();
+    try {
+      await Supabase.instance.client
+          .from('bookings')
+          .update({'status': 'arrived'})
+          .eq('id', bookingId);
+      await loadBookings();
+    } catch (e) {
+      debugPrint('Error marking booking arrived: $e');
+    }
+  }
+
+  Future<void> markBookingInProgress(String bookingId) async {
+    try {
+      await Supabase.instance.client
+          .from('bookings')
+          .update({'status': 'in_progress'})
+          .eq('id', bookingId);
+      await loadBookings();
+    } catch (e) {
+      debugPrint('Error marking booking in-progress: $e');
+    }
+  }
+
+  // Haversine distance in km between two lat/lng points
+  static double haversineKm(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371.0;
+    final dLat = (lat2 - lat1) * 3.141592653589793 / 180;
+    final dLng = (lng2 - lng1) * 3.141592653589793 / 180;
+    final a = (dLat / 2).abs() * (dLat / 2).abs() +
+        (lat1 * 3.141592653589793 / 180).abs() * (lat2 * 3.141592653589793 / 180).abs() *
+        (dLng / 2).abs() * (dLng / 2).abs();
+    return r * 2 * (a < 1 ? a : 1);
+  }
+
+  // The customer's current location — set from the home screen GPS fetch.
+  double? _customerLat;
+  double? _customerLng;
+  double? get customerLat => _customerLat;
+  double? get customerLng => _customerLng;
+  void setCustomerLocation(double lat, double lng) {
+    _customerLat = lat;
+    _customerLng = lng;
+  }
+
+  // Customer-side: load all verified workers offering a given service.
+  // Used by home-screen category cards (e.g. tap "Electrician" → see all of them).
+  // If [area] is set, prefers workers in that area; otherwise sorts by distance
+  // from the customer's current location (if known).
+  Future<void> loadWorkersByService(String serviceType, {String? area}) async {
+    _recommendedProviders.clear();
+    _pipelineError = null;
+    notifyListeners();
+    try {
+      final supa = Supabase.instance.client;
+      // worker_profiles.skills is text[]; use contains operator
+      var query = supa
+          .from('worker_profiles')
+          .select('id, skills, rate_per_hour, district, area, home_lat, home_lng, rating, total_reviews, profile_photo_url, profiles(full_name, phone_number)')
+          .contains('skills', [serviceType]);
+      if (area != null && area.isNotEmpty) {
+        query = query.eq('area', area);
+      }
+      final rows = await query.order('rating', ascending: false);
+
+      final List<ProviderModel> built = [];
+      for (final row in (rows as List)) {
+        final m = row as Map<String, dynamic>;
+        final prof = (m['profiles'] is Map) ? m['profiles'] as Map<String, dynamic> : <String, dynamic>{};
+        final name = (prof['full_name'] as String?) ?? 'Worker';
+        final wLat = (m['home_lat'] ?? 0.0).toDouble();
+        final wLng = (m['home_lng'] ?? 0.0).toDouble();
+        final dist = (_customerLat != null && _customerLng != null && wLat != 0.0)
+            ? haversineKm(_customerLat!, _customerLng!, wLat, wLng)
+            : 0.0;
+        built.add(ProviderModel(
+          id: m['id'] as String,
+          name: name,
+          services: List<String>.from(m['skills'] ?? []),
+          lat: wLat,
+          lng: wLng,
+          rating: (m['rating'] ?? 0.0).toDouble(),
+          pricePerVisit: (m['rate_per_hour'] ?? 0) as int,
+          phone: (prof['phone_number'] as String?) ?? '',
+          distanceKm: dist,
+          score: (m['rating'] ?? 0.0).toDouble(),
+          reasoning: '${m['area'] ?? ''}, ${m['district'] ?? ''} · ${m['total_reviews'] ?? 0} reviews',
+          imageUrl: (m['profile_photo_url'] as String?) ??
+              'https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&background=4CAF50&color=fff&size=200',
+        ));
+      }
+      // Closest first when we have customer GPS
+      if (_customerLat != null) {
+        built.sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+      }
+      _recommendedProviders.addAll(built);
+    } catch (e) {
+      _pipelineError = e.toString();
+      debugPrint('Error loading workers by service: $e');
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  // Worker-side dashboard stats — computed from bookings + worker_profiles.
+  // Returns: {todayEarnings, weekEarnings, jobsToday, rating, totalReviews, jobsCompleted}
+  Future<Map<String, dynamic>> loadWorkerStats() async {
+    final supa = Supabase.instance.client;
+    final uid = supa.auth.currentUser?.id;
+    if (uid == null) return {};
+    try {
+      // Fetch completed bookings for this worker (price + completed_at)
+      final bookings = await supa
+          .from('bookings')
+          .select('price_estimate, final_price, completed_at, status')
+          .eq('worker_id', uid)
+          .eq('status', 'completed');
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final weekStart = today.subtract(Duration(days: now.weekday - 1)); // Monday
+
+      int todayEarn = 0, weekEarn = 0, totalEarn = 0;
+      int jobsToday = 0, jobsWeek = 0;
+      for (final row in (bookings as List)) {
+        final m = row as Map<String, dynamic>;
+        final price = (m['final_price'] ?? m['price_estimate'] ?? 0) as int;
+        totalEarn += price;
+        final completedIso = m['completed_at'] as String?;
+        if (completedIso == null) continue;
+        final completed = DateTime.tryParse(completedIso)?.toLocal();
+        if (completed == null) continue;
+        if (completed.isAfter(today)) { todayEarn += price; jobsToday++; }
+        if (completed.isAfter(weekStart)) { weekEarn += price; jobsWeek++; }
+      }
+
+      // Worker profile for rating + total counts
+      final profileRows = await supa
+          .from('worker_profiles')
+          .select('rating, total_reviews, jobs_completed')
+          .eq('id', uid)
+          .limit(1);
+      double rating = 0.0;
+      int totalReviews = 0, jobsCompleted = 0;
+      if (profileRows is List && profileRows.isNotEmpty) {
+        final p = profileRows.first as Map<String, dynamic>;
+        rating = (p['rating'] ?? 0.0).toDouble();
+        totalReviews = (p['total_reviews'] ?? 0) as int;
+        jobsCompleted = (p['jobs_completed'] ?? 0) as int;
+      }
+
+      return {
+        'todayEarnings': todayEarn,
+        'weekEarnings':  weekEarn,
+        'totalEarnings': totalEarn,
+        'jobsToday':     jobsToday,
+        'jobsWeek':      jobsWeek,
+        'jobsCompleted': jobsCompleted,
+        'rating':        rating,
+        'totalReviews':  totalReviews,
+      };
+    } catch (e) {
+      debugPrint('Error loading worker stats: $e');
+      return {};
+    }
+  }
+
+  // Worker-side: list jobs assigned to this worker
+  Future<List<Booking>> loadWorkerJobs() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('bookings')
+          .select()
+          .eq('worker_id', _userId)
+          .order('created_at', ascending: false);
+      return (response as List).map((e) => Booking.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (e) {
+      debugPrint('Error loading worker jobs: $e');
+      return [];
+    }
   }
 
   Future<void> markBookingComplete(String bookingId) async {
-    await _api.markComplete(bookingId);
-    await loadBookings();
+    try {
+      await Supabase.instance.client
+          .from('bookings')
+          .update({
+            'status': 'completed',
+            'completed_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', bookingId);
+      await loadBookings();
+    } catch (e) {
+      debugPrint('Error marking booking complete: $e');
+    }
   }
+}
+
+class WorkerRegistrationData {
+  String fullName = '';
+  String phone = '';
+  String cnic = '';
+  String district = '';
+  String address = '';
+  File? profilePhoto;
+  
+  Set<String> skills = {};
+  double hourlyRate = 750;
+  
+  Set<String> areas = {};
+  File? cnicFront;
+  File? cnicBack;
+  File? cert;
+
+  double? homeLat;
+  double? homeLng;
 }

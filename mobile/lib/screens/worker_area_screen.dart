@@ -2,7 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import '../app/routes.dart';
+import '../providers/app_state.dart';
 
 class WorkerAreaScreen extends StatefulWidget {
   const WorkerAreaScreen({super.key});
@@ -11,12 +13,24 @@ class WorkerAreaScreen extends StatefulWidget {
 }
 
 class _WorkerAreaScreenState extends State<WorkerAreaScreen> {
-  final Set<String> _selectedAreas = {'G-13', 'F-7'};
+  final Set<String> _selectedAreas = {};
   File? _profileFile;
   File? _cnicFrontFile;
   File? _cnicBackFile;
   File? _certFile;
   final _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    final appState = Provider.of<AppState>(context, listen: false);
+    final data = appState.workerRegistrationData;
+    _selectedAreas.addAll(data.areas);
+    _profileFile = data.profilePhoto;
+    _cnicFrontFile = data.cnicFront;
+    _cnicBackFile = data.cnicBack;
+    _certFile = data.cert;
+  }
 
   static const _teal = Color(0xFF075E54);
   static const _green = Color(0xFF25D366);
@@ -61,6 +75,7 @@ class _WorkerAreaScreenState extends State<WorkerAreaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = Provider.of<AppState>(context);
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
@@ -201,11 +216,39 @@ class _WorkerAreaScreenState extends State<WorkerAreaScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: (_selectedAreas.isNotEmpty && _profileFile != null && _cnicFrontFile != null && _cnicBackFile != null)
-                          ? () => Navigator.pushReplacementNamed(context, AppRoutes.workerHub)
-                          : null,
-                      icon: const Icon(Icons.arrow_forward, size: 18),
-                      label: const Text('Submit Registration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                      onPressed: (appState.isRegisteringWorker || _selectedAreas.isEmpty || _profileFile == null || _cnicFrontFile == null || _cnicBackFile == null)
+                          ? null
+                          : () async {
+                              appState.workerRegistrationData.areas = _selectedAreas;
+                              appState.workerRegistrationData.profilePhoto = _profileFile;
+                              appState.workerRegistrationData.cnicFront = _cnicFrontFile;
+                              appState.workerRegistrationData.cnicBack = _cnicBackFile;
+                              appState.workerRegistrationData.cert = _certFile;
+
+                              final messenger = ScaffoldMessenger.of(context);
+                              try {
+                                await appState.submitWorkerRegistration();
+                                if (!mounted) return;
+                                messenger.showSnackBar(const SnackBar(
+                                  content: Text('Registration submitted! Verification pending.'),
+                                  backgroundColor: _teal, duration: Duration(seconds: 2),
+                                ));
+                                Navigator.pushReplacementNamed(context, AppRoutes.workerHub);
+                              } catch (e) {
+                                if (!mounted) return;
+                                messenger.showSnackBar(SnackBar(
+                                  content: Text('Failed: $e', maxLines: 4),
+                                  backgroundColor: Colors.red.shade700,
+                                  duration: const Duration(seconds: 8),
+                                ));
+                              }
+                            },
+                      icon: appState.isRegisteringWorker
+                          ? const SizedBox.shrink()
+                          : const Icon(Icons.arrow_forward, size: 18),
+                      label: appState.isRegisteringWorker
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Text('Submit Registration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _teal,
                         foregroundColor: Colors.white,

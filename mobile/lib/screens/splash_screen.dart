@@ -26,17 +26,26 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    Future.delayed(const Duration(milliseconds: 3200), () {
-      if (mounted && !_navigated) {
-        _navigated = true;
-        final appState = Provider.of<AppState>(context, listen: false);
-        if (appState.isAuthenticated) {
-          Navigator.pushReplacementNamed(context, AppRoutes.home);
-        } else {
-          Navigator.pushReplacementNamed(context, AppRoutes.login);
-        }
-      }
-    });
+    Future.delayed(const Duration(milliseconds: 3200), _routeAfterSplash);
+  }
+
+  Future<void> _routeAfterSplash() async {
+    if (!mounted || _navigated) return;
+    _navigated = true;
+    final appState = Provider.of<AppState>(context, listen: false);
+    if (!appState.isAuthenticated) {
+      Navigator.pushReplacementNamed(context, AppRoutes.login);
+      return;
+    }
+    // Check role from Supabase profiles — workers go to Worker Hub,
+    // customers (or unknown role) go to the customer home.
+    final role = await appState.fetchUserRole();
+    if (!mounted) return;
+    if (role == 'worker') {
+      Navigator.pushReplacementNamed(context, AppRoutes.workerHub);
+    } else {
+      Navigator.pushReplacementNamed(context, AppRoutes.home);
+    }
   }
 
   @override
@@ -159,12 +168,12 @@ class _SplashScreenState extends State<SplashScreen>
 
                   const SizedBox(height: 32),
 
-                  // KARGAR AI text
+                  // KARIGAR AI text
                   RichText(
                     text: const TextSpan(
                       children: [
                         TextSpan(
-                          text: 'KARGAR ',
+                          text: 'KARIGAR ',
                           style: TextStyle(
                             fontSize: 34, fontWeight: FontWeight.w800,
                             color: Colors.white, letterSpacing: 2,
