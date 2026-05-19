@@ -52,13 +52,21 @@ async def run_session(
 ) -> RequestSession:
     """Run the full happy-path graph for a new session."""
     from app.graph import conflict_resolver as cr
+    from app.api import routes as _routes
 
-    state = RequestSession(
-        id=session_id,
-        user_id=user_id,
-        raw_text=raw_text,
-        user_phone=user_phone,
-    )
+    # Reuse the placeholder session registered by POST /sessions so that
+    # /sessions/{id}/trace can stream partial progress while the graph runs.
+    state = _routes._sessions.get(session_id)
+    if state is None:
+        state = RequestSession(
+            id=session_id,
+            user_id=user_id,
+            raw_text=raw_text,
+            user_phone=user_phone,
+        )
+        _routes._sessions[session_id] = state
+    else:
+        state.user_phone = user_phone
 
     from app.graph.nodes import intent, discovery, ranking, decision, booking, followup
 

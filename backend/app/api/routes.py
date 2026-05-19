@@ -97,6 +97,14 @@ async def start_session(req: StartSessionRequest, background_tasks: BackgroundTa
     # would race with the background task and get a 404.
     get_bus().register_session(session_id)
 
+    # Register a placeholder session immediately so the web polling fallback
+    # can query /sessions/{id}/trace while the pipeline is still running.
+    _sessions[session_id] = RequestSession(
+        id=session_id,
+        user_id=req.user_id,
+        raw_text=req.raw_text,
+    )
+
     background_tasks.add_task(_run_graph_in_background, session_id, req)
 
     return StartSessionResponse(session_id=session_id)
@@ -156,6 +164,12 @@ async def get_session(session_id: str):
         "trace_count": len(state.trace),
         "resolution_attempts": state.resolution_attempts,
     }
+
+
+@router.get("/sessions/{session_id}/trace")
+async def get_session_trace(session_id: str):
+    state = _session_or_404(session_id)
+    return [evt.model_dump(mode="json") for evt in state.trace]
 
 
 @router.get("/sessions/{session_id}/stream")

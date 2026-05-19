@@ -130,6 +130,72 @@ def _resolve_time_window(label: str, now: datetime) -> TimeWindow | None:
     return None
 
 
+def _rule_based_parse(raw_text: str, now: datetime) -> ParsedIntent:
+    """Fast keyword-based intent parser — used in DEMO_MODE for any query."""
+    text = raw_text.lower()
+
+    # Language detection
+    if any(ord(c) > 0x0600 for c in raw_text):
+        lang = Language.URDU
+    elif any(w in text for w in ["chahiye", "hai", "mein", "ko", "abhi", "kal", "subah", "bhejo", "aaj"]):
+        lang = Language.ROMAN_URDU
+    else:
+        lang = Language.ENGLISH
+
+    # Service type
+    svc = ServiceType.UNKNOWN
+    if any(w in text for w in ["ac", "cooling", "air condition", "اے سی"]):
+        svc = ServiceType.AC_TECHNICIAN
+    elif any(w in text for w in ["plumb", "pipe", "nal", "paani", "نلکہ", "leak"]):
+        svc = ServiceType.PLUMBER
+    elif any(w in text for w in ["electric", "bijli", "wire", "بجلی", "short"]):
+        svc = ServiceType.ELECTRICIAN
+    elif any(w in text for w in ["tutor", "teacher", "math", "science", "ustaz", "استاد"]):
+        svc = ServiceType.TUTOR
+    elif any(w in text for w in ["beauty", "parlor", "makeup", "hair", "wax"]):
+        svc = ServiceType.BEAUTICIAN
+    elif any(w in text for w in ["carpenter", "badhai", "wood", "لکڑی", "furniture"]):
+        svc = ServiceType.CARPENTER
+    elif any(w in text for w in ["paint", "rang", "رنگ"]):
+        svc = ServiceType.PAINTER
+
+    # Urgency
+    urgency = "normal"
+    if any(w in text for w in ["abhi", "urgent", "jaldi", "leak", "short circuit", "ابھی"]):
+        urgency = "high"
+    elif any(w in text for w in ["agle hafte", "next week", "whenever", "اگلے"]):
+        urgency = "low"
+
+    # Location hint — pick any capitalized word or known area code
+    location_hint = ""
+    for word in raw_text.split():
+        stripped = word.strip(".,!?")
+        if len(stripped) >= 2 and (stripped[0].isupper() or stripped.upper() == stripped):
+            if stripped.lower() not in {"i", "a", "ac", "ok", "hi"}:
+                location_hint = stripped
+                break
+
+    # Time window
+    time_window: TimeWindow | None = None
+    if any(w in text for w in ["abhi", "ابھی", "right now", "urgent"]):
+        time_window = TimeWindow(start=now, end=now + timedelta(hours=2), label="abhi")
+    elif any(w in text for w in ["kal subah", "کل صبح", "tomorrow morning"]):
+        tomorrow = (now + timedelta(days=1)).replace(hour=6, minute=0, second=0, microsecond=0)
+        time_window = TimeWindow(start=tomorrow, end=tomorrow.replace(hour=12), label="kal subah")
+    elif any(w in text for w in ["kal", "tomorrow"]):
+        tomorrow = (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+        time_window = TimeWindow(start=tomorrow, end=tomorrow.replace(hour=18), label="kal")
+
+    return ParsedIntent(
+        language=lang,
+        service_type=svc,
+        location_hint=location_hint,
+        time_window=time_window,
+        urgency=urgency,
+        notes="",
+    )
+
+
 async def run(state: RequestSession) -> RequestSession:
     settings = get_settings()
     now = datetime.now(_TZ)
@@ -152,25 +218,27 @@ async def run(state: RequestSession) -> RequestSession:
     ) as t:
         try:
             # DEMO_MODE short-circuit: serve a deterministic ParsedIntent for
-            # the 5 canonical demo prompts without burning Gemini quota.
+            # known prompts without burning Gemini quota. For unrecognized input
+            # we do a fast rule-based parse so the full demo works offline.
             if settings.demo_mode:
                 cached = demo_cache.lookup_intent(state.raw_text)
-                if cached is not None:
-                    state.parsed_intent = cached
-                    latency_ms = int((time.perf_counter_ns() - t0) / 1_000_000)
-                    t.add_tool_call(
-                        "DemoCache.intent",
-                        {"raw_text": state.raw_text},
-                        cached.model_dump(mode="json"),
-                        latency_ms=latency_ms,
-                    )
-                    t.set_output(cached.model_dump(mode="json"))
-                    t.set_reasoning(
-                        f"[DEMO_MODE cache hit] Detected {cached.language.value}; "
-                        f"service={cached.service_type.pretty_name}, "
-                        f"location='{cached.location_hint}', urgency={cached.urgency}"
-                    )
-                    return state
+                if cached is None:
+                    cached = _rule_based_parse(state.raw_text, now)
+                state.parsed_intent = cached
+                latency_ms = int((time.perf_counter_ns() - t0) / 1_000_000)
+                t.add_tool_call(
+                    "DemoCache.intent",
+                    {"raw_text": state.raw_text},
+                    cached.model_dump(mode="json"),
+                    latency_ms=latency_ms,
+                )
+                t.set_output(cached.model_dump(mode="json"))
+                t.set_reasoning(
+                    f"[DEMO_MODE] Detected {cached.language.value}; "
+                    f"service={cached.service_type.pretty_name}, "
+                    f"location='{cached.location_hint}', urgency={cached.urgency}"
+                )
+                return state
 
             messages = [
                 ("system", _SYSTEM_PROMPT + f"\n\nCurrent server time (Asia/Karachi): {now.isoformat()}"),

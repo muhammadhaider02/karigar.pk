@@ -54,27 +54,42 @@ async def run(state: RequestSession) -> RequestSession:
             t.set_reasoning("No ranked candidates — cannot decide")
             return state
 
-        # DEMO_MODE: pick top-1 deterministically and reuse a cached
-        # justification if we have one for this (provider, language).
+        # DEMO_MODE: pick top-1 deterministically, no Gemini call needed.
         if settings.demo_mode:
             top = ranked[0]
             cached_just = demo_cache.lookup_decision(top.provider.name, language)
-            if cached_just is not None:
-                state.chosen = top
-                t.add_tool_call(
-                    "DemoCache.decision",
-                    {"provider": top.provider.name, "language": language.value},
-                    {"chosen_index": 0, "justification": cached_just},
-                )
-                t.set_output(
-                    {
-                        "chosen_id": top.provider.id,
-                        "chosen_name": top.provider.name,
-                        "justification": cached_just,
-                    }
-                )
-                t.set_reasoning(f"[DEMO_MODE cache hit] {cached_just}")
-                return state
+            if cached_just is None:
+                # Generate a simple justification without LLM
+                if language == Language.ROMAN_URDU:
+                    cached_just = (
+                        f"{top.provider.name} ko chuna gaya kyunki yeh sabse qareeb hai, "
+                        f"rating {top.provider.rating} hai, aur aap ke slot par available hai."
+                    )
+                elif language == Language.URDU:
+                    cached_just = (
+                        f"{top.provider.name} کو چنا گیا کیونکہ یہ سب سے قریب ہے، "
+                        f"ریٹنگ {top.provider.rating} ہے، اور آپ کے وقت پر دستیاب ہے۔"
+                    )
+                else:
+                    cached_just = (
+                        f"Selected {top.provider.name} — nearest provider, "
+                        f"rated {top.provider.rating}, available in your time slot."
+                    )
+            state.chosen = top
+            t.add_tool_call(
+                "DemoCache.decision",
+                {"provider": top.provider.name, "language": language.value},
+                {"chosen_index": 0, "justification": cached_just},
+            )
+            t.set_output(
+                {
+                    "chosen_id": top.provider.id,
+                    "chosen_name": top.provider.name,
+                    "justification": cached_just,
+                }
+            )
+            t.set_reasoning(f"[DEMO_MODE] {cached_just}")
+            return state
 
         ranked_summary = [
             {
