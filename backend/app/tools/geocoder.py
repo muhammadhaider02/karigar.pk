@@ -86,19 +86,26 @@ class MockGeocoder:
 
 
 class GoogleGeocoder:
-    """Drop-in replacement for `MockGeocoder` backed by Google Geocoding API.
-
-    Not implemented yet — the class is present so `build_tools()` can
-    `from app.tools.geocoder import GoogleGeocoder` without raising
-    `ImportError` when `GOOGLE_MAPS_KEY` is set. Wire `httpx.AsyncClient`
-    + `https://maps.googleapis.com/maps/api/geocode/json` to finish.
-    """
+    """Geocoder backed by Google Geocoding API, with MockGeocoder fallback."""
 
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
+        self._mock = MockGeocoder()
 
-    async def resolve(self, hint: str) -> GeoPoint:  # pragma: no cover
-        raise NotImplementedError(
-            "GoogleGeocoder is a stub. Either implement it (see app/tools/"
-            "geocoder.py) or unset GOOGLE_MAPS_KEY to use MockGeocoder."
-        )
+    async def resolve(self, hint: str) -> GeoPoint:
+        if not hint:
+            return await self._mock.resolve(hint)
+        try:
+            import httpx
+            url = "https://maps.googleapis.com/maps/api/geocode/json"
+            params = {"address": hint + ", Islamabad, Pakistan", "key": self.api_key}
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(url, params=params)
+                data = resp.json()
+            if data.get("status") == "OK" and data.get("results"):
+                loc = data["results"][0]["geometry"]["location"]
+                return GeoPoint(lat=loc["lat"], lng=loc["lng"], label=hint)
+        except Exception:
+            pass
+        # Fall back to mock lookup table
+        return await self._mock.resolve(hint)

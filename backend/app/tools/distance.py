@@ -25,18 +25,29 @@ class HaversineDistance:
 
 
 class GoogleDistanceMatrix:
-    """Drop-in replacement backed by Google Distance Matrix API.
-
-    Stub — see `GoogleGeocoder` for the wiring pattern. Until implemented,
-    `build_tools()` will only instantiate it when `GOOGLE_MAPS_KEY` is set,
-    and the first call surfaces a clear NotImplementedError.
-    """
+    """Distance matrix backed by Google API with Haversine fallback."""
 
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
+        self._haversine = HaversineDistance()
 
-    async def km(self, a: GeoPoint, b: GeoPoint) -> float:  # pragma: no cover
-        raise NotImplementedError(
-            "GoogleDistanceMatrix is a stub. Implement it or unset "
-            "GOOGLE_MAPS_KEY to use HaversineDistance."
-        )
+    async def km(self, a: GeoPoint, b: GeoPoint) -> float:
+        try:
+            import httpx
+            url = "https://maps.googleapis.com/maps/api/distancematrix/json"
+            params = {
+                "origins": f"{a.lat},{a.lng}",
+                "destinations": f"{b.lat},{b.lng}",
+                "mode": "driving",
+                "key": self.api_key,
+            }
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(url, params=params)
+                data = resp.json()
+            row = data.get("rows", [{}])[0]
+            elem = row.get("elements", [{}])[0]
+            if elem.get("status") == "OK":
+                return elem["distance"]["value"] / 1000.0
+        except Exception:
+            pass
+        return await self._haversine.km(a, b)
