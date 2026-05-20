@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../app/routes.dart';
@@ -21,8 +23,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
   late LatLng _workerPos;
   late LatLng _homePos;
   late LatLng _center;
-  late List<LatLng> _routePoints;
+  List<LatLng> _routePoints = [];
   double _distanceKm = 0;
+  double _routeDistanceKm = 0; // road distance from OSRM
+  int _routeDurationMin = 0;   // drive time from OSRM
+  bool _routeFetched = false;
 
   int _currentStatus = 1;
   late AnimationController _pulseCtrl;
@@ -38,7 +43,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
   }
 
   void _computeRoute(AppState st) {
-    // Worker home: from the selected provider; Customer home: from AppState GPS
     final wLat = st.selectedProvider?.lat ?? 33.7215;
     final wLng = st.selectedProvider?.lng ?? 73.0433;
     final cLat = st.customerLat ?? 33.7295;
@@ -47,7 +51,40 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
     _homePos   = LatLng(cLat, cLng);
     _center    = LatLng((wLat + cLat) / 2, (wLng + cLng) / 2);
     _distanceKm = AppState.haversineKm(wLat, wLng, cLat, cLng);
-    _routePoints = [_workerPos, _homePos];
+    if (_routePoints.isEmpty) _routePoints = [_workerPos, _homePos];
+    if (!_routeFetched) {
+      _routeFetched = true;
+      _fetchOsrmRoute(wLat, wLng, cLat, cLng);
+    }
+  }
+
+  Future<void> _fetchOsrmRoute(double wLat, double wLng, double cLat, double cLng) async {
+    try {
+      final url = Uri.parse(
+        'https://router.project-osrm.org/route/v1/driving/$wLng,$wLat;$cLng,$cLat?overview=full&geometries=geojson',
+      );
+      final resp = await http.get(url).timeout(const Duration(seconds: 10));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final routes = data['routes'] as List?;
+        if (routes != null && routes.isNotEmpty) {
+          final route = routes[0] as Map<String, dynamic>;
+          final coords = (route['geometry']['coordinates']) as List;
+          final pts = coords.map<LatLng>(
+            (c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
+          ).toList();
+          final distM = (route['distance'] as num?)?.toDouble() ?? 0;
+          final durS  = (route['duration'] as num?)?.toDouble() ?? 0;
+          if (mounted) setState(() {
+            _routePoints = pts;
+            _routeDistanceKm = distM / 1000;
+            _routeDurationMin = (durS / 60).ceil();
+          });
+        }
+      }
+    } catch (_) {
+      // Keep straight-line fallback
+    }
   }
 
   String _formatSlot(DateTime? dt) {
@@ -81,7 +118,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
     if (slotIso != null && slotIso.isNotEmpty) {
       slotDt = DateTime.tryParse(slotIso)?.toLocal();
     }
-    final etaMin = (_distanceKm / 30 * 60).round(); // ~30km/h urban
+    // Use OSRM road duration when available; fall back to haversine / 30 km/h estimate
+    final etaMin = _routeDurationMin > 0 ? _routeDurationMin : (_distanceKm / 30 * 60).round().clamp(1, 999);
+    final displayDist = _routeDistanceKm > 0 ? _routeDistanceKm : _distanceKm;
     return Scaffold(
       body: Stack(
         children: [
@@ -172,9 +211,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
                       children: [
                         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           const Text('Estimated Arrival', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
-                          Text('${etaMin == 0 ? 1 : etaMin} mins',
+                          Text('$etaMin min${etaMin == 1 ? '' : 's'}',
                               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _teal)),
-                          Text('Distance: ${_distanceKm.toStringAsFixed(1)} km',
+                          Text('${displayDist.toStringAsFixed(1)} km by road',
                               style: const TextStyle(fontSize: 11, color: Color(0xFF8696A0))),
                         ]),
                         Container(
@@ -242,28 +281,37 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
                     const SizedBox(height: 20),
                     Row(children: [
                       Stack(children: [
-                        const CircleAvatar(radius: 28, backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=11')),
+                        CircleAvatar(radius: 28,
+                          backgroundImage: (st.selectedProvider?.imageUrl.isNotEmpty == true)
+                            ? NetworkImage(st.selectedProvider!.imageUrl) : null,
+                          backgroundColor: _teal.withValues(alpha: 0.15),
+                          child: (st.selectedProvider?.imageUrl.isNotEmpty != true)
+                            ? Text(st.selectedProvider?.name.isNotEmpty == true ? st.selectedProvider!.name[0] : '?',
+                                style: const TextStyle(color: _teal, fontWeight: FontWeight.w700, fontSize: 18))
+                            : null,
+                        ),
                         Positioned(bottom: 0, right: 0, child: Container(
                           width: 14, height: 14,
                           decoration: BoxDecoration(color: _green, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
                         )),
                       ]),
                       const SizedBox(width: 16),
-                      const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Ali Plumbing Services', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF111B21))),
-                        Row(children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(st.selectedProvider?.name ?? 'Provider', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF111B21))),
+                        const Row(children: [
                           Icon(Icons.circle, color: _green, size: 8),
                           SizedBox(width: 6),
                           Text('On his way', style: TextStyle(fontSize: 13, color: Color(0xFF8696A0))),
                         ]),
                       ])),
-                      const Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                         Row(children: [
-                          Icon(Icons.star, color: _teal, size: 16),
-                          SizedBox(width: 4),
-                          Text('4.9', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _teal)),
+                          const Icon(Icons.star, color: _teal, size: 16),
+                          const SizedBox(width: 4),
+                          Text(st.selectedProvider?.rating.toStringAsFixed(1) ?? '–',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _teal)),
                         ]),
-                        Text('120+ jobs', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
+                        const Text('Rated worker', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
                       ]),
                     ]),
                     const SizedBox(height: 20),
@@ -279,9 +327,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
                           child: const Icon(Icons.call, color: _teal, size: 20),
                         ),
                         const SizedBox(width: 16),
-                        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Direct Contact', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
-                          Text('0300-1234567', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _teal)),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Direct Contact', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
+                          Text(st.selectedProvider?.phone.isNotEmpty == true ? st.selectedProvider!.phone : '—',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _teal)),
                         ])),
                         Container(
                           width: 44, height: 44,
@@ -307,7 +356,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with TickerProv
                       Expanded(flex: 2, child: ElevatedButton.icon(
                         onPressed: () {},
                         icon: const Icon(Icons.call, size: 18),
-                        label: const Text('Call Ali', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                        label: Text('Call ${st.selectedProvider?.name.split(' ').first ?? 'Worker'}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _teal, foregroundColor: Colors.white, elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

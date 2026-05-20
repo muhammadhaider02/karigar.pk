@@ -63,7 +63,9 @@ class KarigarApiClient {
     int lastCount = 0;
     int identicalCount = 0;
     bool sawTerminal = false;
-    while (identicalCount < 12 && !sawTerminal) {
+    // 50 identical cycles × 900 ms ≈ 45 s — enough for Render cold starts (~30-60 s).
+    // Terminal condition: chosen or booking appears in the session meta.
+    while (identicalCount < 50 && !sawTerminal) {
       await Future.delayed(const Duration(milliseconds: 900));
       try {
         final resTrace = await _client.get(Uri.parse('$baseUrl/sessions/$sessionId/trace'));

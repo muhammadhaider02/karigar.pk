@@ -42,7 +42,11 @@ class _WorkerSkillSelectionScreenState extends State<WorkerSkillSelectionScreen>
     {'icon': Icons.foundation,          'label': 'Masonry',        'urdu': 'راج گیر',    'value': 'mason'},
     {'icon': Icons.local_fire_department,'label': 'Welding',       'urdu': 'ویلڈنگ',     'value': 'welder'},
     {'icon': Icons.bug_report,          'label': 'Pest Control',   'urdu': 'کیڑے مار',   'value': 'pest_control'},
-    {'icon': Icons.build,               'label': 'Appliance Repair','urdu': 'مرمت',     'value': 'appliance_repair'},
+    {'icon': Icons.build,               'label': 'Appliance Repair','urdu': 'مرمت',       'value': 'appliance_repair'},
+    {'icon': Icons.school,              'label': 'Tutoring',        'urdu': 'پڑھانا',     'value': 'tutor'},
+    {'icon': Icons.face_retouching_natural, 'label': 'Beautician', 'urdu': 'بیوٹیشن',    'value': 'beautician'},
+    {'icon': Icons.solar_power,         'label': 'Solar Tech',      'urdu': 'سولر',       'value': 'solar_technician'},
+    {'icon': Icons.drive_eta,           'label': 'Driver',          'urdu': 'ڈرائیور',    'value': 'driver'},
   ];
 
   @override

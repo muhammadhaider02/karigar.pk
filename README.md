@@ -107,7 +107,7 @@ curl http://127.0.0.1:8000/health    # {"status": "ok"}
 cd mobile
 flutter pub get
 
-# Production — defaults to https://karigar-pk.onrender.com (no flag needed)
+# Production — defaults to https://karigar-pk.onrender.com
 flutter run
 
 # Local dev — Android emulator

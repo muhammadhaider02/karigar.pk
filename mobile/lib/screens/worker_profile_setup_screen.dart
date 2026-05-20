@@ -404,33 +404,43 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
 
                                   const SizedBox(height: 20),
                                   _buildLabel('Address (Optional)'),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: const Color(0xFFE4E6EB)),
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 2),
-                                          child: Icon(Icons.home_outlined, color: Color(0xFF075E54), size: 20),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: TextFormField(
-                                            controller: _addressController,
-                                            maxLines: 2,
-                                            style: const TextStyle(fontSize: 14),
-                                            decoration: const InputDecoration.collapsed(
-                                              hintText: 'Enter your complete address',
-                                              hintStyle: TextStyle(color: Color(0xFF8696A0)),
+                                  Theme(
+                                    data: ThemeData(inputDecorationTheme: const InputDecorationTheme(filled: false, border: InputBorder.none)),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFFE4E6EB)),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Padding(
+                                            padding: EdgeInsets.only(top: 2),
+                                            child: Icon(Icons.home_outlined, color: Color(0xFF8696A0), size: 20),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _addressController,
+                                              maxLines: 2,
+                                              style: const TextStyle(fontSize: 14, color: Color(0xFF111B21)),
+                                              cursorColor: const Color(0xFF075E54),
+                                              decoration: const InputDecoration(
+                                                hintText: 'Enter your complete address',
+                                                hintStyle: TextStyle(color: Color(0xFF8696A0), fontSize: 14),
+                                                border: InputBorder.none,
+                                                enabledBorder: InputBorder.none,
+                                                focusedBorder: InputBorder.none,
+                                                filled: false,
+                                                isDense: true,
+                                                contentPadding: EdgeInsets.zero,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 12),
@@ -532,38 +542,52 @@ class _WorkerProfileSetupScreenState extends State<WorkerProfileSetupScreen> {
   }
 
   Widget _buildTextField({required String hint, IconData? icon, IconData? suffixIcon, TextEditingController? controller, String? Function(String?)? validator, TextInputType? keyboardType}) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 52),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE4E6EB)),
+    return Theme(
+      data: ThemeData(
+        inputDecorationTheme: const InputDecorationTheme(
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+        ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, color: const Color(0xFF8696A0), size: 20),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: TextFormField(
-              controller: controller,
-              validator: validator,
-              keyboardType: keyboardType,
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: const TextStyle(color: Color(0xFF8696A0)),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 52),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE4E6EB)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: const Color(0xFF8696A0), size: 20),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: TextFormField(
+                controller: controller,
+                validator: validator,
+                keyboardType: keyboardType,
+                style: const TextStyle(fontSize: 14, color: Color(0xFF111B21)),
+                cursorColor: const Color(0xFF075E54),
+                decoration: InputDecoration(
+                  hintText: hint,
+                  hintStyle: const TextStyle(color: Color(0xFF8696A0), fontSize: 14),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ),
-          ),
-          if (suffixIcon != null)
-            Icon(suffixIcon, color: const Color(0xFF8696A0), size: 18),
-        ],
+            if (suffixIcon != null)
+              Icon(suffixIcon, color: const Color(0xFF8696A0), size: 18),
+          ],
+        ),
       ),
     );
   }

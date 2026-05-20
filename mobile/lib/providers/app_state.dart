@@ -43,6 +43,11 @@ class AppState extends ChangeNotifier {
   final List<ProviderModel> _recommendedProviders = [];
   List<ProviderModel> get recommendedProviders => List.unmodifiable(_recommendedProviders);
 
+  final List<ProviderModel> _nearbyWorkers = [];
+  List<ProviderModel> get nearbyWorkers => List.unmodifiable(_nearbyWorkers);
+  bool _isLoadingNearby = false;
+  bool get isLoadingNearby => _isLoadingNearby;
+
   ProviderModel? _selectedProvider;
   ProviderModel? get selectedProvider => _selectedProvider;
 
@@ -224,8 +229,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Start session on the backend — pass GPS coords so DiscoveryAgent can
-      //    skip geocoding when the query contains no explicit location.
       final sessionId = await _api.startSession(
         userId: _userId,
         rawText: query,
@@ -327,7 +330,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final String code = 'BKG-${DateTime.now().millisecondsSinceEpoch}';
+      final String code = 'BKG-${DateTime.now().millisecondsSinceEpoch.toRadixString(16).substring(0, 8).toUpperCase()}';
       
       // Clean up service type to match the Supabase `service_category` enum.
       // Valid values: plumber, electrician, ac_technician, carpenter, painter,
@@ -336,7 +339,7 @@ class AppState extends ChangeNotifier {
       const validEnums = {
         'plumber','electrician','ac_technician','carpenter','painter',
         'cleaner','mason','welder','pest_control','appliance_repair',
-        'tutor','beautician',
+        'tutor','beautician','solar_technician','driver',
       };
       if (!validEnums.contains(serviceType)) serviceType = 'plumber';
 
@@ -345,16 +348,19 @@ class AppState extends ChangeNotifier {
       final hoursAway = slot.difference(DateTime.now()).inMinutes / 60;
       final urgency = hoursAway < 2 ? 'high' : (hoursAway < 24 ? 'medium' : 'low');
 
-      final bookingData = {
+      // Only include worker_id if it looks like a real UUID (not a Google Places gplace_ id)
+      final isRealUuid = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false).hasMatch(provider.id);
+
+      final bookingData = <String, dynamic>{
         'booking_code': code,
         'customer_id': _userId,
-        'worker_id': provider.id,
+        if (isRealUuid && provider.id.isNotEmpty) 'worker_id': provider.id,
         'service_type': serviceType,
-        'description': _currentQuery,
-        'raw_input': _currentQuery,
+        'description': _currentQuery.isNotEmpty ? _currentQuery : serviceType,
+        'raw_input': _currentQuery.isNotEmpty ? _currentQuery : serviceType,
         'urgency': urgency,
         'status': 'worker_assigned',
-        'price_estimate': provider.pricePerVisit,
+        'price_estimate': provider.pricePerVisit > 0 ? provider.pricePerVisit : 500,
         'slot_time': slot.toUtc().toIso8601String(),
         if (_customerLat != null) 'job_lat': _customerLat,
         if (_customerLng != null) 'job_lng': _customerLng,
@@ -369,7 +375,8 @@ class AppState extends ChangeNotifier {
       _currentBooking = Booking.fromJson(response);
       await loadBookings();
     } catch (e) {
-      debugPrint('Error confirming booking: $e');
+      debugPrint('confirmBooking error: $e');
+      rethrow;
     }
   }
 
@@ -381,12 +388,18 @@ class AppState extends ChangeNotifier {
     try {
       final response = await Supabase.instance.client
           .from('bookings')
-          .select()
+          .select('*, workers(full_name)')
           .eq('customer_id', _userId)
           .order('created_at', ascending: false);
       _bookings
         ..clear()
-        ..addAll((response as List).map((e) => Booking.fromJson(e as Map<String, dynamic>)));
+        ..addAll((response as List).map((e) {
+          final m = Map<String, dynamic>.from(e as Map);
+          // Flatten joined workers.full_name → provider_name
+          final workerMap = m['workers'] as Map<String, dynamic>?;
+          if (workerMap != null) m['provider_name'] = workerMap['full_name'] ?? '';
+          return Booking.fromJson(m);
+        }));
     } catch (e) {
       debugPrint('Error loading bookings: $e');
     } finally {
@@ -404,6 +417,28 @@ class AppState extends ChangeNotifier {
       await loadBookings();
     } catch (e) {
       debugPrint('Error cancelling booking: $e');
+    }
+  }
+
+  Future<void> workerAcceptBooking(String bookingId) async {
+    try {
+      await Supabase.instance.client
+          .from('bookings')
+          .update({'status': 'worker_accepted'})
+          .eq('id', bookingId);
+    } catch (e) {
+      debugPrint('workerAcceptBooking error: $e');
+    }
+  }
+
+  Future<void> workerDeclineBooking(String bookingId) async {
+    try {
+      await Supabase.instance.client
+          .from('bookings')
+          .update({'status': 'cancelled'})
+          .eq('id', bookingId);
+    } catch (e) {
+      debugPrint('workerDeclineBooking error: $e');
     }
   }
 
@@ -507,6 +542,56 @@ class AppState extends ChangeNotifier {
       _pipelineError = e.toString();
       debugPrint('Error loading workers by service: $e');
     } finally {
+      notifyListeners();
+    }
+  }
+
+  // Top 6 closest verified workers regardless of service type — for "Near You" home section.
+  Future<void> loadNearbyWorkers() async {
+    if (_customerLat == null || _customerLng == null) return;
+    _isLoadingNearby = true;
+    notifyListeners();
+    try {
+      final supa = Supabase.instance.client;
+      final rows = await supa
+          .from('workers')
+          .select('id, skills, rate_per_hour, district, area, home_lat, home_lng, rating, total_reviews, profile_photo_url, full_name, phone_number')
+          .eq('verification_status', 'verified')
+          .not('home_lat', 'is', null)
+          .not('home_lng', 'is', null);
+
+      final List<ProviderModel> built = [];
+      for (final row in (rows as List)) {
+        final m = row as Map<String, dynamic>;
+        final wLat = (m['home_lat'] ?? 0.0).toDouble();
+        final wLng = (m['home_lng'] ?? 0.0).toDouble();
+        if (wLat == 0.0 && wLng == 0.0) continue;
+        final dist = haversineKm(_customerLat!, _customerLng!, wLat, wLng);
+        final name = (m['full_name'] as String?) ?? 'Worker';
+        built.add(ProviderModel(
+          id: m['id'] as String,
+          name: name,
+          services: List<String>.from(m['skills'] ?? []),
+          lat: wLat,
+          lng: wLng,
+          rating: (m['rating'] ?? 0.0).toDouble(),
+          pricePerVisit: (m['rate_per_hour'] ?? 0) as int,
+          phone: (m['phone_number'] as String?) ?? '',
+          distanceKm: dist,
+          score: (m['rating'] ?? 0.0).toDouble(),
+          reasoning: '${m['area'] ?? ''}, ${m['district'] ?? ''}',
+          imageUrl: (m['profile_photo_url'] as String?) ??
+              'https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&background=4CAF50&color=fff&size=200',
+        ));
+      }
+      built.sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+      _nearbyWorkers
+        ..clear()
+        ..addAll(built.take(6));
+    } catch (e) {
+      debugPrint('loadNearbyWorkers error: $e');
+    } finally {
+      _isLoadingNearby = false;
       notifyListeners();
     }
   }

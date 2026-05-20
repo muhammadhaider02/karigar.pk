@@ -103,9 +103,13 @@ async def health():
 
 @router.post("/transcribe")
 async def transcribe_audio(req: TranscribeRequest):
-    """Transcribe base64-encoded audio to text using Gemini 2.5 Flash multimodal."""
+    """Transcribe base64-encoded audio to text using Gemini 2.5 Flash multimodal.
+    When DEMO_MODE=true returns a canned plumber query so the full flow can be
+    tested without spending Gemini API credits."""
+    settings = get_settings()
+    if settings.demo_mode:
+        return {"text": "G-13 mein plumber chahiye"}
     try:
-        settings = get_settings()
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             google_api_key=settings.google_api_key,

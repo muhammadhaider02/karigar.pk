@@ -169,7 +169,8 @@ def _rule_based_parse(raw_text: str, now: datetime) -> ParsedIntent:
     # Location hint — prefer sector codes (G-13, F-10, I-8 etc.) then first
     # meaningful capitalized token, skipping Urdu/Roman-Urdu filler words.
     _URDU_STOP = {
-        "mujhe", "mein", "main", "chahiye", "karein", "karo", "hai", "hain",
+        "mujhe", "mujah", "mein", "main", "mai", "chahiye", "caiyah", "ciayah",
+        "chayie", "chaiye", "karein", "karo", "hai", "hain",
         "aur", "ya", "ke", "ki", "ka", "ko", "se", "par", "kal", "subah",
         "raat", "shaam", "abhi", "aj", "aaj", "please", "plz", "thoda",
         "bahut", "shukriya", "bhi", "bhai", "ap", "aap", "yahan", "wahan",
@@ -177,9 +178,12 @@ def _rule_based_parse(raw_text: str, now: datetime) -> ParsedIntent:
     }
     import re as _re
     location_hint = ""
-    _sector = _re.search(r'\b([A-Z]-\d+(?:/\d+)?|[A-Z]{1,2}-\d+)\b', raw_text)
+    # Case-insensitive sector match: g-13, G-13, g 13, f-7, F-10, i-8, etc.
+    # Accepts dash OR space between letter and digits ("g 13" → "G-13")
+    _sector = _re.search(r'\b([A-Za-z]{1,2}[-\s]\d{1,2}(?:/\d+)?)\b', raw_text, _re.IGNORECASE)
     if _sector:
-        location_hint = _sector.group(1)
+        # Normalise to uppercase dash format: "g 13" → "G-13"
+        location_hint = _re.sub(r'\s+', '-', _sector.group(1).upper())
     else:
         for word in raw_text.split():
             stripped = word.strip(".,!?")

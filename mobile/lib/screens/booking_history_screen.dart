@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
-import '../constants/app_colors.dart';
 import '../models/booking.dart';
 import '../providers/app_state.dart';
 
@@ -150,50 +149,136 @@ class _BookingCard extends StatelessWidget {
   static const _textDark = Color(0xFF111B21);
   static const _textGrey = Color(0xFF8696A0);
 
+  void _showCancelDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Cancel Booking?', style: TextStyle(fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to cancel your booking with ${booking.providerName.isNotEmpty ? booking.providerName : 'this provider'}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Keep It')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Provider.of<AppState>(context, listen: false).cancelBooking(booking.id);
+            },
+            child: const Text('Cancel Booking', style: TextStyle(color: Color(0xFFDC2626))),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isCompleted = booking.isCompleted;
     final isCancelled = booking.isCancelled;
+    final canCancel = booking.isPending;
     final statusColor = isCompleted ? const Color(0xFF25D366) : isCancelled ? const Color(0xFFDC2626) : _teal;
 
-    return Container(
+    return GestureDetector(
+      onLongPress: canCancel ? () => _showCancelDialog(context) : null,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFE4E6EB)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
       ),
-      child: Row(children: [
-        Container(
-          width: 50, height: 50,
-          decoration: BoxDecoration(
-            color: statusColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(_iconForService(booking.serviceType), color: statusColor, size: 24),
-        ),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(booking.providerName, style: const TextStyle(color: _textDark, fontSize: 15, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(children: [
+              Container(
+                width: 50, height: 50,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(_iconForService(booking.serviceType), color: statusColor, size: 24),
               ),
-              child: Text(booking.status,
-                style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(booking.providerName.isNotEmpty ? booking.providerName : _humanService(booking.serviceType),
+                  style: const TextStyle(color: _textDark, fontSize: 15, fontWeight: FontWeight.w700)),
+                Text(_humanService(booking.serviceType),
+                  style: const TextStyle(color: _textGrey, fontSize: 12)),
+                const SizedBox(height: 4),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(_friendlyStatus(booking.status),
+                      style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700)),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(booking.displayDate, style: const TextStyle(color: _textGrey, fontSize: 12)),
+                ]),
+              ])),
+              Text(booking.displayCost, style: const TextStyle(color: _teal, fontSize: 15, fontWeight: FontWeight.w800)),
+            ]),
+          ),
+          if (canCancel) ...[
+            const Divider(height: 1, color: Color(0xFFE4E6EB)),
+            InkWell(
+              onTap: () => _showCancelDialog(context),
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(18)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                  Icon(Icons.cancel_outlined, size: 14, color: Color(0xFFDC2626)),
+                  SizedBox(width: 6),
+                  Text('Cancel Booking', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFDC2626))),
+                ]),
+              ),
             ),
-            const SizedBox(width: 8),
-            Text(booking.displayDate, style: const TextStyle(color: _textGrey, fontSize: 12)),
-          ]),
-        ])),
-        Text(booking.displayCost, style: const TextStyle(color: _teal, fontSize: 15, fontWeight: FontWeight.w800)),
-      ]),
+          ],
+        ],
+      ),
+    ),
     );
+  }
+
+  static String _friendlyStatus(String s) {
+    switch (s) {
+      case 'searching': return 'Searching';
+      case 'worker_assigned': return 'Booked';
+      case 'worker_accepted': return 'Accepted';
+      case 'en_route': return 'On the way';
+      case 'arrived': return 'Arrived';
+      case 'in_progress': return 'Working';
+      case 'completed': return 'Done';
+      case 'cancelled': return 'Cancelled';
+      case 'no_show': return 'No Show';
+      case 'disputed': return 'Disputed';
+      case 'resolved': return 'Resolved';
+      default: return s.replaceAll('_', ' ');
+    }
+  }
+
+  static String _humanService(String t) {
+    switch (t) {
+      case 'plumber': return 'Plumbing';
+      case 'electrician': return 'Electrical';
+      case 'ac_technician': return 'AC / HVAC';
+      case 'carpenter': return 'Carpentry';
+      case 'painter': return 'Painting';
+      case 'cleaner': return 'Cleaning';
+      case 'mason': return 'Masonry';
+      case 'welder': return 'Welding';
+      case 'pest_control': return 'Pest Control';
+      case 'appliance_repair': return 'Appliance Repair';
+      case 'tutor': return 'Tutoring';
+      case 'beautician': return 'Beautician';
+      case 'solar_technician': return 'Solar Tech';
+      case 'driver': return 'Driver';
+      default: return t.isEmpty ? 'Service' : t.replaceAll('_', ' ');
+    }
   }
 
   IconData _iconForService(String serviceType) {
@@ -202,8 +287,12 @@ class _BookingCard extends StatelessWidget {
       case 'electrician': return Icons.electrical_services;
       case 'ac_technician': return Icons.ac_unit;
       case 'carpenter': return Icons.carpenter;
+      case 'painter': return Icons.format_paint;
+      case 'cleaner': return Icons.cleaning_services;
       case 'tutor': return Icons.school;
-      case 'beautician': return Icons.face;
+      case 'beautician': return Icons.face_retouching_natural;
+      case 'solar_technician': return Icons.solar_power;
+      case 'driver': return Icons.drive_eta;
       default: return Icons.handyman;
     }
   }

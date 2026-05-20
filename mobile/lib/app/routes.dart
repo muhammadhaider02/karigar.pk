@@ -19,6 +19,8 @@ import '../screens/worker_hub_screen.dart';
 import '../screens/worker_profile_setup_screen.dart';
 import '../screens/worker_job_request_screen.dart';
 import '../screens/messages_screen.dart';
+import '../screens/emergency_screen.dart';
+import '../screens/all_services_screen.dart';
 
 class AppRoutes {
   static const String splash        = '/';
@@ -42,6 +44,8 @@ class AppRoutes {
   static const String workerHub      = '/worker/hub';
   static const String workerJobRequest = '/worker/job-request';
   static const String messages         = '/messages';
+  static const String emergency        = '/emergency';
+  static const String allServices      = '/all-services';
 
   static Map<String, WidgetBuilder> get routes => {
     splash:           (_) => const SplashScreen(),
@@ -64,5 +68,7 @@ class AppRoutes {
     workerHub:        (_) => const WorkerHubScreen(),
     workerJobRequest: (_) => const WorkerJobRequestScreen(),
     messages:         (_) => const MessagesScreen(),
+    emergency:        (_) => const EmergencyScreen(),
+    allServices:      (_) => const AllServicesScreen(),
   };
 }

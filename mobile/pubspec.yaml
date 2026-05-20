@@ -31,7 +31,7 @@ dependencies:
   supabase_flutter: ^2.5.0
 
   # ── Voice ───────────────────────────────────────────────────
-  record: ^5.2.0
+  record: ^6.0.0
   path_provider: ^2.1.5
   url_launcher: ^6.3.0
 

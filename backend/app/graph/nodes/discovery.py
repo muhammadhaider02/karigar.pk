@@ -22,17 +22,27 @@ async def run(state: RequestSession) -> RequestSession:
             "exclude": state.excluded_worker_ids,
         },
     ) as t:
-        # Step 1: Resolve location — GPS override > geocoded hint > Islamabad default
-        if state.override_lat is not None and state.override_lng is not None:
+        # Step 1: Resolve location
+        # Priority: text location hint (geocoded) > GPS override > Islamabad default
+        # GPS override is a fallback for when the query has no explicit place name.
+        if intent.location_hint:
+            try:
+                geo = await tools.geocoder.resolve(intent.location_hint)
+                t.add_tool_call(
+                    "Geocoder.resolve",
+                    {"hint": intent.location_hint},
+                    {"lat": geo.lat, "lng": geo.lng, "label": geo.label},
+                )
+            except Exception as geocode_err:
+                if state.override_lat is not None and state.override_lng is not None:
+                    geo = GeoPoint(lat=state.override_lat, lng=state.override_lng, label="Your location")
+                    t.add_tool_call("GPS.override", {"lat": geo.lat, "lng": geo.lng, "fallback": True, "reason": str(geocode_err)}, {"label": geo.label})
+                else:
+                    geo = GeoPoint(lat=33.6938, lng=73.0652, label="Islamabad")
+                    t.add_tool_call("GPS.default", {}, {"label": geo.label})
+        elif state.override_lat is not None and state.override_lng is not None:
             geo = GeoPoint(lat=state.override_lat, lng=state.override_lng, label="Your location")
             t.add_tool_call("GPS.override", {"lat": geo.lat, "lng": geo.lng}, {"label": geo.label})
-        elif intent.location_hint:
-            geo = await tools.geocoder.resolve(intent.location_hint)
-            t.add_tool_call(
-                "Geocoder.resolve",
-                {"hint": intent.location_hint},
-                {"lat": geo.lat, "lng": geo.lng, "label": geo.label},
-            )
         else:
             geo = GeoPoint(lat=33.6938, lng=73.0652, label="Islamabad")
             t.add_tool_call("GPS.default", {}, {"label": geo.label})

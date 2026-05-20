@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -12,7 +14,6 @@ import '../app/routes.dart';
 import '../providers/app_state.dart';
 import '../services/api_client.dart';
 import '../services/voice.dart';
-import 'all_roles_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -57,12 +58,33 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       final pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.low));
-      // Make the GPS available to AppState so booking + provider distance use it
       if (mounted) {
-        Provider.of<AppState>(context, listen: false)
-            .setCustomerLocation(pos.latitude, pos.longitude);
+        final appState = Provider.of<AppState>(context, listen: false);
+        appState.setCustomerLocation(pos.latitude, pos.longitude);
+        appState.loadNearbyWorkers();
       }
-      setState(() => _locationLabel = '${pos.latitude.toStringAsFixed(3)}, ${pos.longitude.toStringAsFixed(3)}');
+      // Reverse geocode with OSM Nominatim for a human-readable label
+      String label = 'Your Location';
+      try {
+        final uri = Uri.parse(
+          'https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.latitude}&lon=${pos.longitude}',
+        );
+        final res = await http.get(uri, headers: {'User-Agent': 'KarigarAI/1.0'}).timeout(const Duration(seconds: 5));
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body) as Map<String, dynamic>;
+          final addr = data['address'] as Map<String, dynamic>?;
+          final suburb = addr?['suburb'] ?? addr?['neighbourhood'] ?? addr?['village'];
+          final city = addr?['city'] ?? addr?['town'] ?? addr?['county'];
+          if (suburb != null && city != null) {
+            label = '$suburb, $city';
+          } else if (city != null) {
+            label = city as String;
+          } else {
+            label = data['display_name']?.toString().split(',').take(2).join(',').trim() ?? label;
+          }
+        }
+      } catch (_) {}
+      if (mounted) setState(() => _locationLabel = label);
     } catch (_) {
       setState(() => _locationLabel = 'Islamabad, Pakistan');
     }
@@ -71,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _submitQuery() {
     if (_queryController.text.trim().isEmpty) return;
     Provider.of<AppState>(context, listen: false)
-        .startBookingFlow(_queryController.text);
+        .startBookingFlow(_queryController.text.trim());
     Navigator.pushNamed(context, AppRoutes.agentTrace);
   }
 
@@ -98,9 +120,20 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } else {
       final permitted = await _voice.hasPermission;
-      if (!permitted || !mounted) return;
+      if (!permitted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Microphone access denied. Enable it in Settings → Apps → Karigar PK → Permissions.'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
       await _voice.start();
-      setState(() => _isRecording = true);
+      if (mounted) setState(() => _isRecording = true);
     }
   }
 
@@ -119,76 +152,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _showEmergencySheet(BuildContext context) {
-    const emergencyRoles = [
-      ('electrician',    'Electrician',    Icons.electrical_services, Color(0xFFFFB300)),
-      ('plumber',        'Plumber',        Icons.water_damage,         Color(0xFF1565C0)),
-      ('ac_technician',  'AC Technician',  Icons.ac_unit,              Color(0xFF00897B)),
-      ('carpenter',      'Carpenter',      Icons.handyman,             Color(0xFF6D4C41)),
-      ('cleaner',        'Cleaner',        Icons.cleaning_services,    Color(0xFF7B1FA2)),
-      ('pest_control',   'Pest Control',   Icons.pest_control,         Color(0xFF2E7D32)),
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-            ),
-            const SizedBox(height: 16),
-            const Text('What do you need urgently?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            const Text('Tap a service — we\'ll find someone near you right now', style: TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 20),
-            GridView.count(
-              crossAxisCount: 3,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              children: emergencyRoles.map((r) {
-                final (role, label, icon, color) = r;
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context);
-                    final query = 'I need a $label urgently right now, emergency';
-                    Provider.of<AppState>(context, listen: false).startBookingFlow(query);
-                    Navigator.pushNamed(context, AppRoutes.agentTrace);
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: color.withValues(alpha: 0.25)),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(icon, color: color, size: 32),
-                        const SizedBox(height: 8),
-                        Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -201,8 +164,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    final bgColor = isDark ? const Color(0xFF0B1E1C) : const Color(0xFFF7F8FA);
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FA),
+      backgroundColor: bgColor,
       body: Stack(
         children: [
           // ── Background Header Image ───────────────────────────
@@ -224,9 +188,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        const Color(0xFFF7F8FA).withValues(alpha: 0.7),
-                        const Color(0xFFF7F8FA).withValues(alpha: 0.9),
-                        const Color(0xFFF7F8FA),
+                        bgColor.withValues(alpha: 0.7),
+                        bgColor.withValues(alpha: 0.9),
+                        bgColor,
                       ],
                     ),
                   ),
@@ -244,53 +208,63 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Top bar
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, color: Color(0xFF075E54), size: 24),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _locationLabel,
-                          style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600,
-                            color: Color(0xFF111B21),
+                  Builder(builder: (context) {
+                    final topTextColor = isDark ? const Color(0xFFE0F2EF) : const Color(0xFF111B21);
+                    final supaUser = Supabase.instance.client.auth.currentUser;
+                    final avatarUrl = supaUser?.userMetadata?['avatar_url'] as String?;
+                    final initials = (supaUser?.userMetadata?['full_name'] as String? ?? supaUser?.email ?? '?').substring(0, 1).toUpperCase();
+                    return Row(
+                      children: [
+                        const Icon(Icons.location_on, color: Color(0xFF075E54), size: 24),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _locationLabel,
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: topTextColor),
                           ),
                         ),
-                      ),
-                      const Icon(Icons.keyboard_arrow_down, color: Color(0xFF111B21)),
-                      const Spacer(),
-                      Stack(
-                        children: [
-                          const Icon(Icons.notifications_none, color: Color(0xFF111B21), size: 28),
-                          Positioned(
-                            right: 2, top: 2,
-                            child: Container(
-                              width: 10, height: 10,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF25D366),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
+                        Icon(Icons.keyboard_arrow_down, color: topTextColor),
+                        const Spacer(),
+                        Stack(
+                          children: [
+                            Icon(Icons.notifications_none, color: topTextColor, size: 28),
+                            Positioned(
+                              right: 2, top: 2,
+                              child: Container(
+                                width: 10, height: 10,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF25D366),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: bgColor, width: 2),
+                                ),
                               ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        GestureDetector(
+                          onTap: () => setState(() => _selectedNavIndex = 4),
+                          child: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: const Color(0xFF075E54).withValues(alpha: 0.15),
+                            backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                            child: avatarUrl == null
+                                ? Text(initials, style: const TextStyle(color: Color(0xFF075E54), fontWeight: FontWeight.w700, fontSize: 14))
+                                : null,
                           ),
-                        ],
-                      ),
-                      const SizedBox(width: 16),
-                      const CircleAvatar(
-                        radius: 18,
-                        backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=11'),
-                      ),
-                    ],
-                  ).animate().fadeIn().slideY(begin: -0.1),
+                        ),
+                      ],
+                    );
+                  }).animate().fadeIn().slideY(begin: -0.1),
 
                   const SizedBox(height: 32),
 
                   // Greeting
-                  const Text(
+                  Text(
                     'Aaj kya chahiye? 👋',
                     style: TextStyle(
                       fontSize: 28, fontWeight: FontWeight.w800,
-                      color: Color(0xFF111B21), letterSpacing: -0.5,
+                      color: isDark ? const Color(0xFFE0F2EF) : const Color(0xFF111B21), letterSpacing: -0.5,
                     ),
                   ).animate().fadeIn(delay: 150.ms).slideX(begin: -0.05),
                   const SizedBox(height: 6),
@@ -301,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Search Bar
+                  // Search Bar — always white pill so it stands out in both modes
                   Container(
                     height: 56,
                     decoration: BoxDecoration(
@@ -309,7 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
+                          color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
                           blurRadius: 16, offset: const Offset(0, 4),
                         ),
                       ],
@@ -322,37 +296,31 @@ class _HomeScreenState extends State<HomeScreen> {
                         Expanded(
                           child: TextField(
                             controller: _queryController,
-                            style: const TextStyle(fontSize: 15),
+                            style: const TextStyle(fontSize: 15, color: Color(0xFF111B21)),
                             decoration: const InputDecoration(
                               hintText: 'Search for services...',
                               hintStyle: TextStyle(color: Color(0xFF8696A0)),
                               border: InputBorder.none,
+                              filled: false,
                             ),
                             onSubmitted: (_) => _submitQuery(),
                           ),
                         ),
-                        GestureDetector(
-                          onTap: _toggleRecording,
-                          child: _isTranscribing
-                              ? const SizedBox(
-                                  width: 24, height: 24,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF075E54)),
-                                )
-                              : Icon(
-                                  _isRecording ? Icons.mic : Icons.mic_none,
-                                  color: _isRecording ? Colors.red : const Color(0xFF111B21),
-                                  size: 24,
-                                ),
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          margin: const EdgeInsets.all(6),
-                          width: 44, height: 44,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF075E54),
-                            shape: BoxShape.circle,
+                        Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: GestureDetector(
+                            onTap: _toggleRecording,
+                            child: _isTranscribing
+                                ? const SizedBox(
+                                    width: 24, height: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF075E54)),
+                                  )
+                                : Icon(
+                                    _isRecording ? Icons.mic : Icons.mic_none,
+                                    color: _isRecording ? Colors.red : const Color(0xFF075E54),
+                                    size: 24,
+                                  ),
                           ),
-                          child: const Icon(Icons.center_focus_weak, color: Colors.white, size: 20),
                         ),
                       ],
                     ),
@@ -470,7 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _CategoryCard(
                         icon: Icons.more_horiz, color: const Color(0xFF25D366),
                         title: 'More', subtitle: 'See all services',
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AllRolesScreen())),
+                        onTap: () => Navigator.pushNamed(context, AppRoutes.allServices),
                         delay: 950,
                       ),
                     ],
@@ -480,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   // Emergency Banner
                   GestureDetector(
-                    onTap: () => _showEmergencySheet(context),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.emergency),
                     child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -567,165 +535,192 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Recent Booking
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Recent Booking',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF111B21)),
-                      ),
-                      Row(
-                        children: [
-                          Text(
-                            'View All',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF075E54).withValues(alpha: 0.8)),
-                          ),
-                          const SizedBox(width: 2),
-                          Icon(Icons.chevron_right, size: 16, color: const Color(0xFF075E54).withValues(alpha: 0.8)),
-                        ],
-                      ),
-                    ],
-                  ).animate().fadeIn(delay: 1150.ms),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
-                      ],
-                    ),
-                    child: Row(
+                  // Recent Booking (real data)
+                  Consumer<AppState>(builder: (_, st, __) {
+                    final recent = st.bookings.isNotEmpty ? st.bookings.first : null;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 48, height: 48,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF075E54).withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.electric_bolt, color: Color(0xFF075E54)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Recent Booking',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: isDark ? const Color(0xFFE0F2EF) : const Color(0xFF111B21)),
+                            ),
+                            GestureDetector(
+                              onTap: () => Navigator.pushNamed(context, AppRoutes.history),
+                              child: Row(children: [
+                                Text('View All', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF075E54).withValues(alpha: 0.8))),
+                                const SizedBox(width: 2),
+                                Icon(Icons.chevron_right, size: 16, color: const Color(0xFF075E54).withValues(alpha: 0.8)),
+                              ]),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Electrician Visit',
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF111B21)),
+                        const SizedBox(height: 12),
+                        if (recent == null)
+                          GestureDetector(
+                            onTap: () => Navigator.pushNamed(context, AppRoutes.history),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1A2F2C) : Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
                               ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Text('Today, 2:00 PM', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
-                                  const SizedBox(width: 6),
-                                  Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFFD1D7DB), shape: BoxShape.circle)),
-                                  const SizedBox(width: 6),
-                                  const Text('Confirmed', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF25D366))),
-                                ],
+                              child: Row(children: [
+                                Container(
+                                  width: 48, height: 48,
+                                  decoration: BoxDecoration(color: const Color(0xFF075E54).withValues(alpha: 0.1), shape: BoxShape.circle),
+                                  child: const Icon(Icons.history, color: Color(0xFF075E54)),
+                                ),
+                                const SizedBox(width: 16),
+                                const Expanded(child: Text('No bookings yet', style: TextStyle(fontSize: 14, color: Color(0xFF8696A0)))),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(color: const Color(0xFFE8F5EF), borderRadius: BorderRadius.circular(20)),
+                                  child: const Text('Book Now', style: TextStyle(color: Color(0xFF075E54), fontSize: 12, fontWeight: FontWeight.w600)),
+                                ),
+                              ]),
+                            ),
+                          )
+                        else
+                          GestureDetector(
+                            onTap: () => Navigator.pushNamed(context, AppRoutes.history),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1A2F2C) : Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
                               ),
-                              const SizedBox(height: 4),
-                              const Row(
-                                children: [
-                                  Icon(Icons.location_on, size: 12, color: Color(0xFF8696A0)),
-                                  SizedBox(width: 4),
-                                  Text('Bahria Town, Lahore', style: TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF0F2F5),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'View Details',
-                            style: TextStyle(
-                              color: Color(0xFF111B21), fontSize: 12, fontWeight: FontWeight.w600,
+                              child: Row(children: [
+                                Container(
+                                  width: 48, height: 48,
+                                  decoration: BoxDecoration(color: const Color(0xFF075E54).withValues(alpha: 0.1), shape: BoxShape.circle),
+                                  child: const Icon(Icons.handyman, color: Color(0xFF075E54)),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text(
+                                    recent.providerName.isNotEmpty ? recent.providerName : recent.serviceType.replaceAll('_', ' '),
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: isDark ? const Color(0xFFE0F2EF) : const Color(0xFF111B21)),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(children: [
+                                    Text(recent.displayDate, style: const TextStyle(fontSize: 12, color: Color(0xFF8696A0))),
+                                    const SizedBox(width: 6),
+                                    Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFFD1D7DB), shape: BoxShape.circle)),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      recent.isCompleted ? 'Completed' : recent.isCancelled ? 'Cancelled' : 'Active',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: recent.isCompleted ? const Color(0xFF25D366) : recent.isCancelled ? const Color(0xFFDC2626) : const Color(0xFF075E54)),
+                                    ),
+                                  ]),
+                                ])),
+                                Text(recent.displayCost, style: const TextStyle(color: Color(0xFF075E54), fontSize: 14, fontWeight: FontWeight.w700)),
+                              ]),
                             ),
                           ),
-                        ),
                       ],
-                    ),
-                  ).animate().fadeIn(delay: 1250.ms).slideY(begin: 0.1),
+                    );
+                  }).animate().fadeIn(delay: 1150.ms),
 
                   const SizedBox(height: 24),
 
-                  // Providers Near You
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Providers Near You',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF111B21)),
-                      ),
-                      Row(
-                        children: [
-                          Text(
-                            'See All',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF075E54).withValues(alpha: 0.8)),
-                          ),
-                          const SizedBox(width: 2),
-                          Icon(Icons.chevron_right, size: 16, color: const Color(0xFF075E54).withValues(alpha: 0.8)),
-                        ],
-                      ),
-                    ],
-                  ).animate().fadeIn(delay: 1350.ms),
-                  const SizedBox(height: 12),
-                  Container(
-                    height: 140,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      image: const DecorationImage(
-                        image: AssetImage('assets/images/map_placeholder.png'), // Will add a fallback color if asset missing
-                        fit: BoxFit.cover,
-                      ),
-                      color: const Color(0xFFE8F5EF),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Stack(
+                  // Near You — real workers from DB
+                  Consumer<AppState>(builder: (_, st, __) {
+                    final workers = st.nearbyWorkers;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Positioned(
-                          left: 16, top: 16,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Trusted pros', style: TextStyle(color: Color(0xFF075E54), fontWeight: FontWeight.w600, fontSize: 12)),
-                              const Text('Near You', style: TextStyle(color: Color(0xFF111B21), fontWeight: FontWeight.w800, fontSize: 20)),
-                              const SizedBox(height: 4),
-                              Text('See who\'s available in\nBahria Town, Lahore', style: TextStyle(color: const Color(0xFF111B21).withValues(alpha: 0.7), fontSize: 12)),
-                            ],
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Near You', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: isDark ? const Color(0xFFE0F2EF) : const Color(0xFF111B21))),
+                            GestureDetector(
+                              onTap: () => Navigator.pushNamed(context, AppRoutes.allServices),
+                              child: Row(children: [
+                                Text('See All', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF075E54).withValues(alpha: 0.8))),
+                                const SizedBox(width: 2),
+                                Icon(Icons.chevron_right, size: 16, color: const Color(0xFF075E54).withValues(alpha: 0.8)),
+                              ]),
+                            ),
+                          ],
                         ),
-                        Positioned(
-                          right: 16, bottom: 16,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        const SizedBox(height: 12),
+                        if (st.isLoadingNearby)
+                          const Center(child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: CircularProgressIndicator(color: Color(0xFF075E54)),
+                          ))
+                        else if (workers.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF075E54),
-                              borderRadius: BorderRadius.circular(24),
+                              color: isDark ? const Color(0xFF1A2F2C) : const Color(0xFFE8F5EF),
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.location_on, color: Colors.white, size: 16),
-                                SizedBox(width: 6),
-                                Text('View Map', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
-                              ],
+                            child: const Center(child: Text('Enable location to see nearby pros', style: TextStyle(color: Color(0xFF8696A0), fontSize: 13))),
+                          )
+                        else
+                          SizedBox(
+                            height: 160,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: workers.length,
+                              itemBuilder: (context, i) {
+                                final w = workers[i];
+                                return GestureDetector(
+                                  onTap: () {
+                                    Provider.of<AppState>(context, listen: false).selectProvider(w);
+                                    Navigator.pushNamed(context, AppRoutes.providerProfile);
+                                  },
+                                  child: Container(
+                                    width: 130,
+                                    margin: EdgeInsets.only(right: i < workers.length - 1 ? 12 : 0),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? const Color(0xFF1A2F2C) : Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: isDark ? const Color(0xFF2E4A47) : const Color(0xFFE4E6EB)),
+                                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 24,
+                                          backgroundColor: const Color(0xFF075E54).withValues(alpha: 0.15),
+                                          backgroundImage: w.imageUrl.isNotEmpty ? NetworkImage(w.imageUrl) : null,
+                                          child: w.imageUrl.isEmpty ? Text(w.name[0], style: const TextStyle(color: Color(0xFF075E54), fontWeight: FontWeight.w700)) : null,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(w.name.split(' ').first, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: isDark ? const Color(0xFFE0F2EF) : const Color(0xFF111B21)), overflow: TextOverflow.ellipsis),
+                                        Text(
+                                          w.services.isNotEmpty ? w.services.first.replaceAll('_', ' ') : 'Worker',
+                                          style: const TextStyle(fontSize: 11, color: Color(0xFF8696A0)),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const Spacer(),
+                                        Row(children: [
+                                          const Icon(Icons.star, size: 11, color: Color(0xFFFBBF24)),
+                                          const SizedBox(width: 3),
+                                          Text(w.rating.toStringAsFixed(1), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF8696A0))),
+                                          const Spacer(),
+                                          Text('${w.distanceKm.toStringAsFixed(1)}km', style: const TextStyle(fontSize: 10, color: Color(0xFF075E54), fontWeight: FontWeight.w600)),
+                                        ]),
+                                      ],
+                                    ),
+                                  ),
+                                ).animate().fadeIn(delay: Duration(milliseconds: 80 * i));
+                              },
                             ),
                           ),
-                        ),
                       ],
-                    ),
-                  ).animate().fadeIn(delay: 1450.ms).slideY(begin: 0.1),
+                    );
+                  }).animate().fadeIn(delay: 1350.ms),
                 ],
               ),
             ),
@@ -844,9 +839,16 @@ class _ProfilePanelState extends State<_ProfilePanel> {
                     CircleAvatar(
                       radius: 28,
                       backgroundColor: const Color(0xFF075E54).withValues(alpha: 0.15),
-                      backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                      child: _profileImage == null
-                          ? const Icon(Icons.person, color: _teal, size: 32)
+                      backgroundImage: _profileImage != null
+                          ? FileImage(_profileImage!) as ImageProvider
+                          : (supabaseUser?.userMetadata?['avatar_url'] != null
+                              ? NetworkImage(supabaseUser!.userMetadata!['avatar_url'] as String)
+                              : null),
+                      child: (_profileImage == null && supabaseUser?.userMetadata?['avatar_url'] == null)
+                          ? Text(
+                              displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                              style: const TextStyle(color: _teal, fontWeight: FontWeight.w700, fontSize: 22),
+                            )
                           : null,
                     ),
                     Positioned(
@@ -883,7 +885,7 @@ class _ProfilePanelState extends State<_ProfilePanel> {
                 _SettingRow(
                   icon: isDark ? Icons.dark_mode : Icons.wb_sunny_outlined,
                   iconColor: isDark ? const Color(0xFF00C896) : const Color(0xFFF59E0B),
-                  label: isDark ? 'Dark Mode' : 'Morning Mode',
+                  label: isDark ? 'Dark Mode' : 'Light Mode',
                   subtitle: isDark ? 'Switch to light theme' : 'Switch to dark theme',
                   textColor: text,
                   subtitleColor: grey,

@@ -71,16 +71,6 @@ class _AgentTraceScreenState extends State<AgentTraceScreen> {
                   }
                 }
 
-                // Debug strip so we can see the FE/BE handshake live
-                final debugStrip = Container(
-                  margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFFCD34D))),
-                  child: Text(
-                    'running=${state.isPipelineRunning}  events=${state.traceEvents.length}  providers=${state.recommendedProviders.length}  booking=${state.currentBooking?.id.substring(0, 6) ?? "—"}  decision=${state.finalDecision ?? "—"}  err=${state.pipelineError ?? "—"}',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), fontFamily: 'monospace'),
-                  ),
-                );
 
                 if (!state.isPipelineRunning && state.pipelineError != null) {
                   return Center(
@@ -105,7 +95,6 @@ class _AgentTraceScreenState extends State<AgentTraceScreen> {
                 }
 
                 return Column(children: [
-                  debugStrip,
                   Expanded(child: ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: state.traceEvents.length + (state.isPipelineRunning ? 1 : 0),

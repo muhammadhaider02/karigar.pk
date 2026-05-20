@@ -16,29 +16,9 @@ class LoginScreen extends StatelessWidget {
             // ── Shared header (logo + skyline) ──────────────────
             const KarigarScreenHeader(height: 270),
 
-            // ── Dark green service card with wave ────────────────
-            ClipPath(
-              clipper: KarigarWaveClipper(),
-              child: Container(
-                width: double.infinity,
-                color: const Color(0xFF0D2D2A),
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 52),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _ServiceChip(icon: Icons.electric_bolt, label: 'Electrician'),
-                    _ServiceChip(icon: Icons.plumbing, label: 'Plumber'),
-                    _ServiceChip(icon: Icons.construction, label: 'Carpenter'),
-                    _ServiceChip(icon: Icons.format_paint, label: 'Painter'),
-                    _ServiceChip(icon: Icons.settings, label: '& More'),
-                  ],
-                ),
-              ),
-            ).animate().fadeIn(delay: 300.ms),
-
             // ── White bottom card ─────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -219,28 +199,6 @@ class _AuthButton extends StatelessWidget {
   }
 }
 
-// ── Service icon chip ─────────────────────────────────────────
-class _ServiceChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _ServiceChip({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: const Color(0xFF25D366), size: 28),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11, color: Color(0xFF8ECFC9),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      );
-}
 
 // ── Google G icon (colored) ───────────────────────────────────
 class _GoogleIcon extends StatelessWidget {

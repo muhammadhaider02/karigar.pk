@@ -34,7 +34,7 @@ class Booking {
         providerId: (json['provider_id'] ?? json['worker_id']) as String? ?? '',
         providerName: json['provider_name'] as String? ?? '',
         serviceType: json['service_type'] as String? ?? '',
-        slotStart: (json['slot_start'] ?? json['scheduled_at']) as String? ?? '',
+        slotStart: (json['slot_time'] ?? json['slot_start'] ?? json['scheduled_at']) as String? ?? '',
         slotEnd: json['slot_end'] as String? ?? '',
         status: (json['status'] as String? ?? 'PENDING').toUpperCase(),
         priceEstimate: ((json['price_estimate'] ?? json['final_price'] ?? 0) as num).toInt(),

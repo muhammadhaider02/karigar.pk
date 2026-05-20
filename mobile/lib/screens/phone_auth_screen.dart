@@ -261,7 +261,8 @@ class _Field extends StatelessWidget {
   static const _fieldBg   = Color(0xFFF7F8FA);
   static const _fieldText = Color(0xFF111B21);
   static const _hintColor = Color(0xFF8696A0);
-  static const _iconColor = Color(0xFF075E54);
+  static const _iconColor = Color(0xFF8696A0); // neutral grey, not teal-on-teal
+  static const _focusBorder = Color(0xFF374151); // dark grey focus ring
   static const _border    = Color(0xFFE4E6EB);
 
   @override
@@ -288,7 +289,7 @@ class _Field extends StatelessWidget {
           controller: controller,
           keyboardType: keyboardType,
           obscureText: obscure,
-          cursorColor: _iconColor,
+          cursorColor: _focusBorder,
           style: const TextStyle(fontSize: 15, color: _fieldText),
           decoration: InputDecoration(
             hintText: hint,
@@ -301,7 +302,7 @@ class _Field extends StatelessWidget {
             enabledBorder: InputBorder.none,
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: _iconColor, width: 1.5),
+              borderSide: const BorderSide(color: _focusBorder, width: 1.5),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           ),

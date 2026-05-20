@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_state.dart';
 
 class WorkerJobRequestScreen extends StatefulWidget {
   const WorkerJobRequestScreen({super.key});
@@ -9,6 +11,7 @@ class WorkerJobRequestScreen extends StatefulWidget {
 
 class _WorkerJobRequestScreenState extends State<WorkerJobRequestScreen> {
   bool _accepted = false;
+  bool _loading = false;
   static const _teal = Color(0xFF075E54);
   static const _green = Color(0xFF25D366);
   static const _bg = Color(0xFFF7F8FA);
@@ -192,31 +195,48 @@ class _WorkerJobRequestScreenState extends State<WorkerJobRequestScreen> {
                   const SizedBox(height: 24),
 
                   // Action buttons
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, size: 16),
-                        label: const Text('Decline', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _errorRed, side: const BorderSide(color: Color(0xFFFECACA)),
+                  Builder(builder: (context) {
+                    final bookingId = ModalRoute.of(context)?.settings.arguments as String?;
+                    return Row(children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _loading ? null : () async {
+                            if (bookingId != null) {
+                              setState(() => _loading = true);
+                              await Provider.of<AppState>(context, listen: false).workerDeclineBooking(bookingId);
+                            }
+                            if (mounted) Navigator.pop(context);
+                          },
+                          icon: const Icon(Icons.close, size: 16),
+                          label: const Text('Decline', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _errorRed, side: const BorderSide(color: Color(0xFFFECACA)),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 2, child: ElevatedButton.icon(
+                        onPressed: _loading ? null : () async {
+                          if (bookingId != null) {
+                            setState(() => _loading = true);
+                            await Provider.of<AppState>(context, listen: false).workerAcceptBooking(bookingId);
+                          }
+                          if (mounted) setState(() { _accepted = true; _loading = false; });
+                        },
+                        icon: _loading
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.check, size: 18),
+                        label: const Text('Accept Job', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _teal, foregroundColor: Colors.white, elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 2, child: ElevatedButton.icon(
-                      onPressed: () => setState(() => _accepted = true),
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text('Accept Job', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _teal, foregroundColor: Colors.white, elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    )),
-                  ]).animate().fadeIn(delay: 450.ms),
+                      )),
+                    ]);
+                  }).animate().fadeIn(delay: 450.ms),
 
                   const SizedBox(height: 16),
                   Container(

@@ -160,7 +160,35 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    IconButton(icon: const Icon(Icons.notifications_outlined, color: _textDark), onPressed: () {}),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: _textDark),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      onSelected: (val) async {
+                        switch (val) {
+                          case 'profile':
+                            Navigator.pushNamed(context, AppRoutes.workerProfile);
+                            break;
+                          case 'skills':
+                            Navigator.pushNamed(context, AppRoutes.workerSkills);
+                            break;
+                          case 'areas':
+                            Navigator.pushNamed(context, AppRoutes.workerArea);
+                            break;
+                          case 'signout':
+                            await Supabase.instance.client.auth.signOut();
+                            if (context.mounted) {
+                              Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (_) => false);
+                            }
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'profile', child: Row(children: [Icon(Icons.person_outline, size: 18, color: Color(0xFF075E54)), SizedBox(width: 10), Text('My Profile')])),
+                        const PopupMenuItem(value: 'skills', child: Row(children: [Icon(Icons.construction, size: 18, color: Color(0xFF075E54)), SizedBox(width: 10), Text('Edit Skills & Rate')])),
+                        const PopupMenuItem(value: 'areas', child: Row(children: [Icon(Icons.map_outlined, size: 18, color: Color(0xFF075E54)), SizedBox(width: 10), Text('Edit Service Areas')])),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(value: 'signout', child: Row(children: [Icon(Icons.logout, size: 18, color: Color(0xFFDC2626)), SizedBox(width: 10), Text('Sign Out', style: TextStyle(color: Color(0xFFDC2626)))])),
+                      ],
+                    ),
                   ]);
                   }),
                 )),
@@ -169,7 +197,10 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
           ),
 
           Expanded(
-            child: SingleChildScrollView(
+            child: RefreshIndicator(
+              onRefresh: _loadAll,
+              color: _teal,
+              child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,7 +278,7 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
                         distance: j.status,
                         budget: j.displayCost,
                         time: 'Booking ${j.id.length > 6 ? j.id.substring(0, 6) : j.id}',
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.workerJobRequest),
+                        onTap: () => Navigator.pushNamed(context, AppRoutes.workerJobRequest, arguments: j.id),
                       ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.05),
                     )),
 
@@ -269,6 +300,7 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
               ),
             ),
           ),
+        ),
         ],
       ),
     );

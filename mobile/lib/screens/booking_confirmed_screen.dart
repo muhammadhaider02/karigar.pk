@@ -19,9 +19,12 @@ class BookingConfirmedScreen extends StatelessWidget {
     final provider = state.selectedProvider;
     final booking = state.currentBooking;
 
-    final bookingId = booking?.id.length != null && booking!.id.length > 8
-        ? booking.id.substring(0, 8).toUpperCase()
-        : booking?.id.toUpperCase() ?? 'KRG-28491';
+    // Use booking_code (e.g. BKG-A3F8B2C1) stored in sessionId; fallback to short UUID
+    final bookingId = booking?.sessionId.isNotEmpty == true
+        ? booking!.sessionId
+        : (booking?.id.length != null && booking!.id.length > 8
+            ? 'BKG-${booking.id.substring(0, 8).toUpperCase()}'
+            : booking?.id.toUpperCase() ?? 'KRG-00000');
 
     final priceStr = booking != null
         ? 'PKR ${booking.priceEstimate}'
@@ -323,9 +326,13 @@ class BookingConfirmedScreen extends StatelessWidget {
   String _formatSlot(String iso) {
     try {
       final dt = DateTime.parse(iso).toLocal();
-      final h = dt.hour.toString().padLeft(2, '0');
+      const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      final day = days[dt.weekday - 1];
+      final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
       final m = dt.minute.toString().padLeft(2, '0');
-      return '${dt.day}/${dt.month} at $h:$m';
+      final period = dt.hour >= 12 ? 'PM' : 'AM';
+      return '$day, ${dt.day} ${months[dt.month]} · $h:$m $period';
     } catch (_) { return 'Scheduled'; }
   }
 }
