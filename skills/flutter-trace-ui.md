@@ -32,7 +32,7 @@ class ToolCall {
 }
 ```
 
-The SSE client (`mobile/lib/services/sse_client.dart`) streams these into a Riverpod `StreamProvider<List<TraceEvent>>` keyed by session id.
+The SSE client (`mobile/lib/services/sse_client.dart`) streams events into the app state. The app uses the `provider` package (`ChangeNotifier`), not Riverpod. `AppState` in `mobile/lib/providers/app_state.dart` holds the current trace list and exposes it via `ChangeNotifierProvider`.
 
 ## Per-agent visual identity
 
@@ -62,26 +62,26 @@ Phase badge colours (small pill next to the agent name):
 A single trace event renders as one card on a vertical timeline rail:
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  ●─┤ [icon]  AgentName        [phase badge]  [⏱ 247 ms] │
-│  │ │                                                    │
-│  │ │  Reasoning text wraps here. Sentence case.        │
-│  │ │                                                    │
-│  │ │  [Geocoder] [ProviderStore] [Search]              │  ← tool-call chips
-│  │ │                                                    │
-│  │ │  ▾ Show input/output (tap to expand)              │
-│  └─┘                                                     │
-└──────────────────────────────────────────────────────────┘
++----------------------------------------------------------+
+|  ●-| [icon]  AgentName        [phase badge]  [247 ms]   |
+|  | |                                                     |
+|  | |  Reasoning text wraps here. Sentence case.         |
+|  | |                                                     |
+|  | |  [Geocoder] [ProviderStore] [Search]               |  <- tool-call chips
+|  | |                                                     |
+|  | |  v Show input/output (tap to expand)               |
+|  +-+                                                      |
++----------------------------------------------------------+
 ```
 
-- The bullet (●) is filled while the step is "live" (within last 2 s) and outlined otherwise.
-- The vertical rail (│) connects consecutive cards.
+- The bullet is filled while the step is "live" (within last 2 s) and outlined otherwise.
+- The vertical rail connects consecutive cards.
 - The latency badge color:
-  - `< 500 ms` → green
-  - `< 2000 ms` → yellow
-  - `>= 2000 ms` → red
-- Tap a chip → bottom sheet with the tool call's `args` and `result`.
-- Tap `▾ Show input/output` → expands an inline JSON viewer (use `flutter_highlight` or a custom monospace `Text`).
+  - `< 500 ms` -> green
+  - `< 2000 ms` -> yellow
+  - `>= 2000 ms` -> red
+- Tap a chip -> bottom sheet with the tool call's `args` and `result`.
+- Tap `v Show input/output` -> expands an inline JSON viewer (use `flutter_highlight` or a custom monospace `Text`).
 
 ## Animations
 
@@ -98,7 +98,7 @@ A single trace event renders as one card on a vertical timeline rail:
 | Loading (session started, no events yet) | Skeleton card with shimmer for 1 to 2 s |
 | Streaming | Live cards, last one pulses |
 | Error (SSE disconnected) | Persistent banner: *"Live trace disconnected, retrying..."*; client polls `GET /sessions/{id}/trace` every 500 ms as fallback |
-| Complete | Static cards, last one shows a "✓ Done" pill |
+| Complete | Static cards, last one shows a "Done" pill |
 
 ## RTL (Urdu)
 
@@ -110,7 +110,7 @@ When `state.parsed_intent.language == "ur"`, wrap the timeline in `Directionalit
 - `mobile/lib/widgets/tool_call_chip.dart`: small pill, name + optional latency
 - `mobile/lib/widgets/phase_badge.dart`: coloured pill
 - `mobile/lib/widgets/latency_badge.dart`: clock icon + color-coded text
-- `mobile/lib/screens/trace.dart`: the full timeline; consumes `traceProvider(sessionId)`
+- `mobile/lib/screens/trace.dart`: the full timeline; reads from `AppState` via `context.watch<AppState>()`
 
 ## Theming
 

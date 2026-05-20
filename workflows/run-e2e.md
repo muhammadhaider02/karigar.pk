@@ -23,7 +23,7 @@
 
 | Test | Input | Asserts |
 |---|---|---|
-| `test_happy_path_roman_urdu` | `"Mujhe kal subah G-13 mein AC technician chahiye"` | top provider = Ali AC Services; booking created with status CONFIRMED; faux-WhatsApp message in Roman Urdu |
+| `test_happy_path_roman_urdu` | `"Mujhe kal subah G-13 mein AC technician chahiye"` | top provider = Ali AC Services; booking created with status worker_accepted; faux-WhatsApp message in Roman Urdu |
 | `test_happy_path_urdu` | `"کل صبح جی-۱۳ میں اے سی ٹیکنیشن چاہیے"` | same as above; faux-WhatsApp in Urdu |
 | `test_happy_path_english` | `"I need an AC technician in G-13 tomorrow morning"` | same as above; faux-WhatsApp in English |
 
@@ -31,9 +31,9 @@
 
 | Test | Setup | Asserts |
 |---|---|---|
-| `test_no_show_auto_rebook` | Create booking, fast-forward time past `T+15min` watchdog | Original booking marked `NO_SHOW`; a new booking exists with a different provider; trace contains a `recover` phase event |
-| `test_user_cancellation_with_rebook` | Create booking, call `POST /bookings/{id}/cancel?rebook=true` | Original `CANCELLED`; new booking exists with `triggered_by="user_cancellation"` in its trace |
-| `test_provider_unavailable_proactive` | Create booking, call `POST /providers/{id}/unavailable` | Original `CANCELLED`; new booking with different provider; user notification sent |
+| `test_no_show_auto_rebook` | Create booking, fast-forward time past `T+15min` watchdog | Original booking marked `no_show`; a new booking exists with a different worker; trace contains a `recover` phase event |
+| `test_user_cancellation_with_rebook` | Create booking, call `POST /bookings/{id}/cancel?rebook=true` | Original `cancelled`; new booking exists with `triggered_by="user_cancellation"` in its trace |
+| `test_provider_unavailable_proactive` | Create booking, call `POST /providers/{id}/unavailable` | Original `cancelled`; new booking with different worker; user notification sent |
 | `test_double_booking_race` | Spawn 2 concurrent BookingAgent calls for the same slot | Exactly 1 booking succeeds; loser's session has a `slot_conflict` trace event followed by a `recover`-phase rebook |
 | `test_resolution_attempts_cap` | Force 3 sequential no-shows on the same session | After attempt 3: no further auto-rebook; user is shown top-3 alternatives; `resolution_attempts == 3` |
 
@@ -42,7 +42,7 @@
 1. **Ensure clean state**:
    ```bash
    cd backend
-   uv run python -m app.data.seed --quick    # only re-seeds providers, keeps test DB pattern
+   uv run python -m app.data.seed    # upserts workers into Supabase (idempotent)
    ```
 
 2. **Run tests**:
@@ -83,7 +83,7 @@ For tests that exercise the scheduler, set `DEMO_TIME_SCALE=600` (1 real-second 
 |---|---|
 | `GOOGLE_API_KEY not set` | Either set the env var or run tests with `DEMO_MODE=true` to use cached responses |
 | Test hangs on scheduler | `DEMO_TIME_SCALE` not set in fixture: APScheduler is waiting real time |
-| `SlotConflict` test always passes both sides | DB UNIQUE constraint missing; re-check `backend/app/db/models.py::Booking.__table_args__` |
+| `SlotConflict` test always passes both sides | Partial unique index `uq_worker_slot` missing from Supabase `bookings` table; apply the missing migration |
 | Roman Urdu test asserts on Urdu | The language detection heuristic regressed (see `skills/multilingual-intent.md`) |
 
 ## Acceptance criteria

@@ -21,6 +21,7 @@
 - **[uv](https://docs.astral.sh/uv/)**: `winget install astral-sh.uv` on Windows, `brew install uv` on macOS
 - A **Google AI Studio API key** for Gemini (free tier is enough for the demo).
   Get one at https://aistudio.google.com/apikey
+- A **Supabase project** with the schema applied. See the migration files in `backend/`.
 
 ### Environment
 
@@ -28,6 +29,8 @@
 cp .env.example .env
 # then edit .env and fill in at minimum:
 #   GOOGLE_API_KEY=...
+#   SUPABASE_URL=...
+#   SUPABASE_SERVICE_KEY=...
 ```
 
 ### Backend
@@ -35,9 +38,10 @@ cp .env.example .env
 ```bash
 cd backend
 uv sync                                      # install deps from pyproject.toml + uv.lock
-uv run python -m app.data.seed               # seed providers.json + SQLite
 uv run python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+The backend seeds the 75 mock workers into Supabase on first startup (idempotent upsert).
 
 Health check:
 ```bash
@@ -79,7 +83,7 @@ Or use the Antigravity workflow: `/run-e2e`.
 
 ## 2. System architecture
 
-Karigar is a multi-agent orchestration system. The mobile app sends a natural-language request, the backend's LangGraph state machine runs the user through an explicit **Plan → Decide → Act → Follow-up → Recover** loop across 7 specialised agents and the full trace streams back to the app in real time.
+Karigar is a multi-agent orchestration system. The mobile app sends a natural-language request, the backend's LangGraph state machine runs the user through an explicit **Plan to Decide to Act to Follow-up to Recover** loop across 7 specialised agents and the full trace streams back to the app in real time.
 
 ```mermaid
 flowchart TB
@@ -120,14 +124,14 @@ For the full architecture deep-dive (state contracts, tool protocols, event-bus 
 
 | # | Agent | Phase | What it does |
 |---|---|---|---|
-| 1 | IntentAgent | plan | Parses Urdu / Roman Urdu / English → typed `ParsedIntent` |
+| 1 | IntentAgent | plan | Parses Urdu / Roman Urdu / English into typed `ParsedIntent` |
 | - | Planning step (Orchestrator) | plan | Emits the 5-step execution plan to the trace |
 | 2 | DiscoveryAgent | act | Geocoder + ProviderStore + optional Search-via-Antigravity-Browser |
 | 3 | RankingAgent | decide | Weighted scoring: 0.4 proximity + 0.3 rating + 0.2 availability + 0.1 price |
-| 4 | DecisionAgent | decide | Gemini picks top-N + writes user-facing justification in their language |
-| 5 | BookingAgent | act | Atomic slot-hold → receipt → faux-WhatsApp |
+| 4 | DecisionAgent | decide | Gemini picks top-N and writes user-facing justification in their language |
+| 5 | BookingAgent | act | Atomic slot-hold to receipt to faux-WhatsApp |
 | 6 | FollowupAgent | follow_up | APScheduler: T-1h reminder, T+15min no-show watchdog, T+2h completion |
-| 7 | ConflictResolverAgent | recover | Reactive to 5 event types; re-invokes Discovery→Booking with exclusions |
+| 7 | ConflictResolverAgent | recover | Reactive to 5 event types; re-invokes Discovery to Booking with exclusions |
 
 ### Trace shape (the rubric-critical artifact)
 
@@ -161,7 +165,7 @@ Karigar uses Google Antigravity at **two layers**: this is the core of how we sc
 
 The entire repo is developed inside Antigravity. Specifically:
 
-- **`agents.md`** at repo root defines five specialised AI dev agents (`product-architect`, `backend-engineer`, `flutter-engineer`, `qa-engineer` and `demo-ops`) so Antigravity spawns the right specialist per task instead of one generic agent.
+- **`docs/agents.md`** defines five specialised AI dev agents (`product-architect`, `backend-engineer`, `flutter-engineer`, `qa-engineer` and `demo-ops`) so Antigravity spawns the right specialist per task instead of one generic agent.
 - **`skills/`** holds six modular `.md` capability files (`multilingual-intent`, `langgraph-node-author`, `provider-ranking-rules`, `booking-simulator`, `conflict-resolution-policy` and `flutter-trace-ui`). Antigravity loads these on-demand (only when the relevant files are being edited) so context stays focused.
 - **`workflows/`** exposes slash commands (`/seed-mock`, `/run-e2e`) that chain multiple agent invocations into autonomous pipelines.
 - Every non-trivial change is made in **Planning mode**, producing Implementation Plans, Task Lists and Walkthrough Artifacts for human review.
@@ -195,12 +199,12 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 
 ### Maps and geocoding
 - **Mock** (default, no API key needed): hand-coded Islamabad sector lookup + haversine distance
-- **Real (drop-in)**: Google Maps Platform: Geocoding API, Places API (Nearby Search), Distance Matrix API. Activated by setting `GOOGLE_MAPS_KEY` in `.env`.
+- **Real (drop-in)**: Google Maps Platform: Geocoding API and Distance Matrix API. Activated by setting `GOOGLE_MAPS_KEY` in `.env`.
 
 ### Backend
 - **FastAPI**: HTTP/SSE server
 - **sse-starlette**: Server-Sent Events for the live trace
-- **SQLAlchemy + SQLite (aiosqlite)**: bookings, agent_traces, conflict_events tables
+- **supabase-py**: Supabase Postgres client (bookings, agent_traces, workers and conflict_events tables)
 - **APScheduler**: reminder / no-show watchdog / completion jobs
 - **Pydantic v2**: typed state objects and LLM structured outputs
 

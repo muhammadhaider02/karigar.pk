@@ -17,18 +17,23 @@ class KarigarApiClient {
   Future<String> startSession({
     required String userId,
     required String rawText,
-    String userPhone = '0300-000-0000',
+    String userPhone = '0300-0000000',
     String language = 'english',
+    double? lat,
+    double? lng,
   }) async {
+    final body = <String, dynamic>{
+      'user_id': userId,
+      'raw_text': rawText,
+      'user_phone': userPhone,
+      'language': language,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+    };
     final response = await _client.post(
       Uri.parse('$baseUrl/sessions'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'user_id': userId,
-        'raw_text': rawText,
-        'user_phone': userPhone,
-        'language': language,
-      }),
+      body: json.encode(body),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to start session: ${response.statusCode}');
@@ -157,6 +162,28 @@ class KarigarApiClient {
 
   Future<void> markComplete(String bookingId) async {
     await _client.post(Uri.parse('$baseUrl/bookings/$bookingId/complete'));
+  }
+
+  Future<List<Map<String, dynamic>>> getRoles() async {
+    try {
+      final response = await _client.get(Uri.parse('$baseUrl/roles'));
+      if (response.statusCode != 200) return [];
+      return (json.decode(response.body) as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getWorkersByRole(String role) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/workers?role=${Uri.encodeComponent(role)}'),
+      );
+      if (response.statusCode != 200) return [];
+      return (json.decode(response.body) as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<bool> healthCheck() async {

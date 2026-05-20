@@ -3,7 +3,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../app/routes.dart';
 import '../providers/app_state.dart';
-import '../services/api_client.dart';
 
 class BookingConfirmedScreen extends StatelessWidget {
   const BookingConfirmedScreen({super.key});
@@ -189,7 +188,7 @@ class BookingConfirmedScreen extends StatelessWidget {
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton.icon(
-                              onPressed: () => _showInvoice(context, booking.id, provider?.name ?? 'Provider', priceStr, slotStr, bookingId),
+                              onPressed: () => _showInvoice(context, booking.id, provider?.name ?? 'Provider', priceStr, slotStr, bookingId, booking.receiptUrl),
                               icon: const Icon(Icons.receipt_long, size: 18, color: _teal),
                               label: const Text('View Invoice', style: TextStyle(color: _teal, fontSize: 15, fontWeight: FontWeight.w700)),
                               style: OutlinedButton.styleFrom(
@@ -233,7 +232,7 @@ class BookingConfirmedScreen extends StatelessWidget {
     );
   }
 
-  void _showInvoice(BuildContext context, String bookingId, String providerName, String price, String slot, String shortId) {
+  void _showInvoice(BuildContext context, String bookingId, String providerName, String price, String slot, String shortId, String? receiptUrl) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -284,20 +283,14 @@ class BookingConfirmedScreen extends StatelessWidget {
               const SizedBox(height: 20),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  '${KarigarApiClient.baseUrl}/receipts/$bookingId.png',
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 160, alignment: Alignment.center,
-                    decoration: BoxDecoration(color: const Color(0xFFF7F8FA), borderRadius: BorderRadius.circular(12)),
-                    child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.receipt_long, color: _textGrey, size: 32),
-                      SizedBox(height: 8),
-                      Text('Server receipt unavailable', style: TextStyle(color: _textGrey, fontSize: 12)),
-                    ]),
-                  ),
-                  loadingBuilder: (_, child, prog) => prog == null ? child : const SizedBox(height: 160, child: Center(child: CircularProgressIndicator(color: _teal))),
-                ),
+                child: receiptUrl != null
+                    ? Image.network(
+                        receiptUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => _receiptPlaceholder(),
+                        loadingBuilder: (_, child, prog) => prog == null ? child : const SizedBox(height: 160, child: Center(child: CircularProgressIndicator(color: _teal))),
+                      )
+                    : _receiptPlaceholder(),
               ),
               const SizedBox(height: 16),
               const Center(child: Text('Thank you for using Karigar AI 🇵🇰', style: TextStyle(color: _textGrey, fontSize: 12))),
@@ -308,6 +301,16 @@ class BookingConfirmedScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _receiptPlaceholder() => Container(
+    height: 160, alignment: Alignment.center,
+    decoration: BoxDecoration(color: const Color(0xFFF7F8FA), borderRadius: BorderRadius.circular(12)),
+    child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(Icons.receipt_long, color: _textGrey, size: 32),
+      SizedBox(height: 8),
+      Text('Receipt generating...', style: TextStyle(color: _textGrey, fontSize: 12)),
+    ]),
+  );
 
   Widget _invRow(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),

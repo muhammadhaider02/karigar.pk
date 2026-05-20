@@ -1,7 +1,4 @@
-"""JsonProviderStore: reads providers from data/providers.json.
-
-Filters by service type, radius and excluded provider IDs.
-"""
+"""Provider stores: JsonProviderStore (fallback) + SupabaseProviderStore (primary)."""
 
 from __future__ import annotations
 
@@ -15,13 +12,6 @@ from app.graph.state import GeoPoint, Provider, ServiceType
 _DATA_FILE = Path(__file__).parent.parent / "data" / "providers.json"
 
 
-@lru_cache(maxsize=1)
-def _load_providers() -> list[Provider]:
-    with open(_DATA_FILE, encoding="utf-8") as f:
-        raw = json.load(f)
-    return [Provider(**p) for p in raw]
-
-
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     R = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -31,8 +21,15 @@ def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+@lru_cache(maxsize=1)
+def _load_providers() -> list[Provider]:
+    with open(_DATA_FILE, encoding="utf-8") as f:
+        raw = json.load(f)
+    return [Provider(**p) for p in raw]
+
+
 class JsonProviderStore:
-    """Searches providers.json for nearby providers matching the requested service."""
+    """Fallback: reads providers from data/providers.json."""
 
     async def search(
         self,
@@ -44,7 +41,6 @@ class JsonProviderStore:
     ) -> list[Provider]:
         all_providers = _load_providers()
         results: list[Provider] = []
-
         for p in all_providers:
             if p.id in exclude:
                 continue
@@ -53,8 +49,50 @@ class JsonProviderStore:
             dist = _haversine_km(lat, lng, p.lat, p.lng)
             if dist <= radius_km:
                 results.append(p)
-
         return results
+
+
+class SupabaseProviderStore:
+    """Primary store: queries the unified workers table in Supabase."""
+
+    async def search(
+        self,
+        service: ServiceType,
+        lat: float,
+        lng: float,
+        radius_km: float,
+        exclude: list[str],
+    ) -> list[Provider]:
+        from app.db.supabase_client import get_supabase
+        supabase = await get_supabase()
+
+        query = (
+            supabase.table("workers")
+            .select("*")
+            .eq("verification_status", "verified")
+            .eq("is_available", True)
+        )
+
+        if service != ServiceType.UNKNOWN:
+            query = query.contains("skills", [service.value])
+
+        if exclude:
+            query = query.not_.in_("id", exclude)
+
+        result = await query.execute()
+        rows = result.data or []
+
+        providers: list[Provider] = []
+        for row in rows:
+            worker_lat = row.get("home_lat")
+            worker_lng = row.get("home_lng")
+            if worker_lat is None or worker_lng is None:
+                continue
+            dist = _haversine_km(lat, lng, float(worker_lat), float(worker_lng))
+            if dist <= radius_km:
+                providers.append(Provider.from_worker_row(row))
+
+        return providers
 
 
 _SERVICE_KEYWORDS = {
@@ -71,11 +109,11 @@ _SERVICE_KEYWORDS = {
 
 
 class GooglePlacesStore:
-    """Provider store backed by Google Places Nearby Search with JsonProviderStore fallback."""
+    """Provider store backed by Google Places Nearby Search with SupabaseProviderStore fallback."""
 
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
-        self._json_store = JsonProviderStore()
+        self._supabase_store = SupabaseProviderStore()
 
     async def search(
         self,
@@ -86,7 +124,7 @@ class GooglePlacesStore:
         exclude: list[str],
     ) -> list[Provider]:
         if not self.api_key:
-            return await self._json_store.search(service, lat, lng, radius_km, exclude)
+            return await self._supabase_store.search(service, lat, lng, radius_km, exclude)
         try:
             import httpx
             keyword = _SERVICE_KEYWORDS.get(service.value, service.value.replace("_", " "))
@@ -101,13 +139,14 @@ class GooglePlacesStore:
                 r = await client.get(url, params=params)
                 data = r.json()
             if data.get("status") not in ("OK", "ZERO_RESULTS"):
-                return await self._json_store.search(service, lat, lng, radius_km, exclude)
+                return await self._supabase_store.search(service, lat, lng, radius_km, exclude)
             results: list[Provider] = []
             for idx, place in enumerate(data.get("results", [])[:10]):
                 pid = f"gplace_{place.get('place_id', idx)}"
                 if pid in exclude:
                     continue
                 loc = place.get("geometry", {}).get("location", {})
+                from app.graph.state import WorkingHours
                 results.append(Provider(
                     id=pid,
                     name=place.get("name", "Unknown"),
@@ -116,12 +155,12 @@ class GooglePlacesStore:
                     lng=loc.get("lng", lng),
                     rating=float(place.get("rating", 4.0)),
                     price_per_visit=800 + (idx * 50),
-                    phone=place.get("formatted_phone_number", "N/A"),
-                    working_hours={"start": "08:00", "end": "20:00"},
+                    phone=place.get("formatted_phone_number") or place.get("vicinity", ""),
+                    working_hours=WorkingHours(start="08:00", end="20:00"),
                     busy_slots=[],
                 ))
             if not results:
-                return await self._json_store.search(service, lat, lng, radius_km, exclude)
+                return await self._supabase_store.search(service, lat, lng, radius_km, exclude)
             return results
         except Exception:
-            return await self._json_store.search(service, lat, lng, radius_km, exclude)
+            return await self._supabase_store.search(service, lat, lng, radius_km, exclude)

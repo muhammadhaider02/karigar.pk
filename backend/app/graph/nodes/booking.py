@@ -82,13 +82,13 @@ async def run(state: RequestSession) -> RequestSession:
         # Step 2: Confirm + receipt
         booking.status = BookingStatus.CONFIRMED
         location_hint = intent.location_hint if intent else ""
-        receipt_path = bookings_crud.render_receipt(booking, chosen.provider, location_hint)
-        booking.receipt_png_path = receipt_path
+        receipt_url = await bookings_crud.render_and_upload_receipt(booking, chosen.provider, location_hint)
+        booking.receipt_url = receipt_url
         await bookings_crud.persist(booking)
         t.add_tool_call(
             "Bookings.create",
             {"booking_id": booking.id},
-            {"status": "CONFIRMED", "receipt_path": receipt_path},
+            {"status": "CONFIRMED", "receipt_url": receipt_url},
         )
 
         # Step 3: WhatsApp notification

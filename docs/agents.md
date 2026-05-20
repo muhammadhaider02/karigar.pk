@@ -1,7 +1,7 @@
 # Karigar AI Dev Team
 
 > Defines the specialised agent personas Antigravity should spawn for each part of the project.
-> Read [`plan.md`](plan.md) for the full project spec before starting any task.
+> Read [`docs/plan.md`](plan.md) for the full project spec before starting any task.
 
 ## How to use this file
 
@@ -13,20 +13,20 @@ When the user gives a task, route it to the most appropriate agent below. Each a
 - Should run in **Planning mode** for any task that touches more than 2 files.
 
 All agents share:
-- **Source of truth**: [`plan.md`](plan.md).
-- **Style**: type hints in Python, `riverpod` for Flutter state, lowercase folder names.
-- **Trace contract**: every backend node must call `trace.append({...})` with the full shape from `plan.md` §3.
+- **Source of truth**: [`docs/plan.md`](plan.md).
+- **Style**: type hints in Python, `provider` package for Flutter state, lowercase folder names.
+- **Trace contract**: every backend node must call `trace.append({...})` with the full shape from `docs/plan.md` section 3.
 - **Commits**: small, focused, conventional commit messages (`feat:`, `fix:`, `chore:`, `docs:`, `test:`).
 
 ---
 
 ## 1. `product-architect`
 
-**Purpose**: Owns the spec, the architecture and the deliverables. Updates `plan.md`, `docs/architecture.md` and `demo/script.md`. Reviews other agents' artifacts before code is merged.
+**Purpose**: Owns the spec, the architecture and the deliverables. Updates `docs/plan.md`, `docs/architecture.md` and `demo/script.md`. Reviews other agents' artifacts before code is merged.
 
 - **Model**: Gemini 2.5 Pro
 - **Mode**: Planning (always)
-- **Scope**: `plan.md`, `docs/`, `demo/`, `agents.md`, `skills/`, `workflows/`
+- **Scope**: `docs/plan.md`, `docs/`, `demo/`, `docs/agents.md`, `skills/`, `workflows/`
 - **Tools**: file edit, terminal (read-only), browser (for research)
 - **Skills auto-loaded**: none (this agent reads all skills)
 - **Dependencies**: none (this is the root agent)
@@ -41,11 +41,11 @@ All agents share:
 - **Scope**: `backend/`
 - **Tools**: file edit, terminal (uv, pytest, uvicorn), browser (for `langchain-google-genai` + `langgraph` docs)
 - **Skills auto-loaded**:
-  - [`skills/langgraph-node-author.md`](skills/langgraph-node-author.md): node signature + state mutation rules
-  - [`skills/multilingual-intent.md`](skills/multilingual-intent.md): when touching `nodes/intent.py`
-  - [`skills/provider-ranking-rules.md`](skills/provider-ranking-rules.md): when touching `nodes/ranking.py`
-  - [`skills/booking-simulator.md`](skills/booking-simulator.md): when touching `nodes/booking.py`, `tools/availability.py`, `tools/bookings.py` or `tools/notifier.py`
-  - [`skills/conflict-resolution-policy.md`](skills/conflict-resolution-policy.md): when touching `nodes/conflict.py`, `graph/conflict_resolver.py`, `events/` or `scheduler/`
+  - [`skills/langgraph-node-author.md`](../skills/langgraph-node-author.md): node signature + state mutation rules
+  - [`skills/multilingual-intent.md`](../skills/multilingual-intent.md): when touching `nodes/intent.py`
+  - [`skills/provider-ranking-rules.md`](../skills/provider-ranking-rules.md): when touching `nodes/ranking.py`
+  - [`skills/booking-simulator.md`](../skills/booking-simulator.md): when touching `nodes/booking.py`, `tools/availability.py`, `tools/bookings.py` or `tools/notifier.py`
+  - [`skills/conflict-resolution-policy.md`](../skills/conflict-resolution-policy.md): when touching `nodes/conflict.py`, `graph/conflict_resolver.py`, `events/` or `scheduler/`
 - **Dependencies**: `product-architect` (spec)
 - **Hand-off**: produces a stable HTTP/SSE contract for `flutter-engineer`. Contract lives at the top of `backend/app/api/routes.py`.
 
@@ -58,7 +58,7 @@ All agents share:
 - **Scope**: `mobile/`
 - **Tools**: file edit, terminal (flutter, dart), browser (for `pub.dev` package docs)
 - **Skills auto-loaded**:
-  - [`skills/flutter-trace-ui.md`](skills/flutter-trace-ui.md): when touching `screens/trace.dart`, `widgets/agent_step_card.dart` or any trace-rendering widget
+  - [`skills/flutter-trace-ui.md`](../skills/flutter-trace-ui.md): when touching `screens/trace.dart`, `widgets/agent_step_card.dart` or any trace-rendering widget
 - **Dependencies**: `backend-engineer` (HTTP/SSE contract)
 - **Hand-off**: a runnable Flutter app + APK for the demo and an optional `flutter build web` artifact
 
@@ -76,7 +76,7 @@ All agents share:
 
 ## 5. `demo-ops`
 
-**Purpose**: Records the 3-5 min demo video **using Antigravity's Browser subagent** so the deliverable is itself an Antigravity Artifact. Exports the agent trace as `trace.md`. Maintains `demo/script.md`.
+**Purpose**: Records the 3 to 5 min demo video **using Antigravity's Browser subagent** so the deliverable is itself an Antigravity Artifact. Exports the agent trace as `trace.md`. Maintains `demo/script.md`.
 
 - **Model**: Gemini 2.5 Pro
 - **Mode**: Planning (recording is high-stakes; needs rehearsal)
@@ -84,7 +84,7 @@ All agents share:
 - **Tools**: Antigravity Browser subagent (mandatory), terminal (uvicorn, flutter run)
 - **Skills auto-loaded**: none (reads `demo/script.md` directly)
 - **Dependencies**: working backend + mobile app from Day 3
-- **Hand-off**: `demo/karigar-demo.mp4` (3-5 min), `demo/trace-export.md` and a set of stills for the README
+- **Hand-off**: `demo/karigar-demo.mp4` (3 to 5 min), `demo/trace-export.md` and a set of stills for the README
 
 ---
 

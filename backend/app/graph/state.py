@@ -1,7 +1,7 @@
 """Karigar shared graph state.
 
 Every LangGraph node reads from and writes to a single ``RequestSession``
-instance. Fields are append-only for ``trace`` and ``excluded_provider_ids``.
+instance. Fields are append-only for ``trace`` and ``excluded_worker_ids``.
 """
 
 from __future__ import annotations
@@ -32,24 +32,21 @@ class ServiceType(str, Enum):
     TUTOR = "tutor"
     BEAUTICIAN = "beautician"
     CARPENTER = "carpenter"
+    PAINTER = "painter"
+    CLEANER = "cleaner"
+    SOLAR_TECHNICIAN = "solar_technician"
+    PEST_CONTROL = "pest_control"
+    DRIVER = "driver"
+    WELDER = "welder"
     UNKNOWN = "unknown"
 
     @property
     def pretty_name(self) -> str:
-        """Human-readable name for receipts, WhatsApp, trace UI etc.
-
-        Stored values are kept as lower_snake_case identifiers so they
-        round-trip cleanly through JSON/DB. This property is the only
-        approved way to render a ServiceType to a user.
-        """
+        """Human-readable name for receipts, WhatsApp, trace UI etc."""
         return _SERVICE_DISPLAY.get(self, self.value.replace("_", " ").title())
 
     @classmethod
     def pretty(cls, raw: str) -> str:
-        """Look up the pretty name from a raw enum-value string (e.g.
-        from ``BookingRecord.service_type``). Falls back to a Title-Cased
-        version of the raw string if unknown.
-        """
         try:
             return cls(raw).pretty_name
         except ValueError:
@@ -63,6 +60,12 @@ _SERVICE_DISPLAY: dict[ServiceType, str] = {
     ServiceType.TUTOR: "Tutor",
     ServiceType.BEAUTICIAN: "Beautician",
     ServiceType.CARPENTER: "Carpenter",
+    ServiceType.PAINTER: "Painter",
+    ServiceType.CLEANER: "Cleaner",
+    ServiceType.SOLAR_TECHNICIAN: "Solar Technician",
+    ServiceType.PEST_CONTROL: "Pest Control",
+    ServiceType.DRIVER: "Driver",
+    ServiceType.WELDER: "Welder",
     ServiceType.UNKNOWN: "Service",
 }
 
@@ -94,16 +97,37 @@ class WorkingHours(BaseModel):
 
 
 class Provider(BaseModel):
-    id: str
+    id: str          # UUID string from workers.id
     name: str
     services: list[str]
     lat: float
     lng: float
-    rating: float  # 3.5 – 4.9
-    price_per_visit: int  # PKR
+    rating: float
+    price_per_visit: int  # PKR — maps to workers.rate_per_hour
     phone: str
     working_hours: WorkingHours
     busy_slots: list[str] = []  # ISO datetime strings
+
+    @classmethod
+    def from_worker_row(cls, row: dict) -> "Provider":
+        wh = row.get("working_hours") or {"start": "08:00", "end": "20:00"}
+        if isinstance(wh, dict):
+            working_hours = WorkingHours(start=wh.get("start", "08:00"), end=wh.get("end", "20:00"))
+        else:
+            working_hours = WorkingHours(start="08:00", end="20:00")
+        busy = row.get("busy_slots") or []
+        return cls(
+            id=str(row["id"]),
+            name=row.get("full_name", "Unknown"),
+            services=list(row.get("skills") or []),
+            lat=float(row.get("home_lat") or 33.6938),
+            lng=float(row.get("home_lng") or 73.0652),
+            rating=float(row.get("rating") or 0.0),
+            price_per_visit=int(row.get("rate_per_hour") or 500),
+            phone=row.get("phone_number") or "N/A",
+            working_hours=working_hours,
+            busy_slots=list(busy) if isinstance(busy, list) else [],
+        )
 
 
 class GeoPoint(BaseModel):
@@ -137,19 +161,19 @@ class BookingStatus(str, Enum):
 
 
 class BookingRecord(BaseModel):
-    """In-memory booking representation (mirrors DB row)."""
+    """In-memory booking representation (mirrors Supabase bookings row)."""
 
     id: str
     session_id: str
     user_id: str
-    provider_id: str
+    provider_id: str    # UUID string (workers.id)
     provider_name: str
     service_type: str
     slot_start: datetime
     slot_end: datetime
     status: BookingStatus = BookingStatus.PENDING
     price_estimate: int
-    receipt_png_path: Optional[str] = None
+    receipt_url: Optional[str] = None   # Supabase Storage public URL
     created_at: datetime = Field(default_factory=lambda: datetime.now(KARACHI_TZ))
 
 
@@ -182,10 +206,14 @@ class TraceEvent(BaseModel):
 class RequestSession(BaseModel):
     """The single shared state object that every LangGraph node reads/writes."""
 
-    id: str  # ulid
+    id: str  # UUID
     user_id: str
-    user_phone: str = "0300-000-0000"
+    user_phone: str = "0300-0000000"
     raw_text: str
+
+    # GPS coordinates from the client device — when set, DiscoveryAgent skips geocoding
+    override_lat: Optional[float] = None
+    override_lng: Optional[float] = None
 
     parsed_intent: Optional[ParsedIntent] = None
 
@@ -197,21 +225,16 @@ class RequestSession(BaseModel):
     trace: list[TraceEvent] = []  # append-only
 
     # Conflict-resolution state
-    excluded_provider_ids: list[str] = []  # append-only
+    excluded_worker_ids: list[str] = []  # UUID strings — append-only
     resolution_attempts: int = 0
-    triggered_by: Optional[str] = None  # e.g. "no_show_detected:provider_42"
+    triggered_by: Optional[str] = None  # e.g. "no_show_detected:<worker-uuid>"
 
     # Snapshot of the user's ORIGINAL time_window at the moment of the first
-    # conflict, so the resolver can apply widening relative to it (rather than
-    # cumulatively widening an already-widened window each retry).
+    # conflict, so the resolver can apply widening relative to it.
     original_time_window: Optional[TimeWindow] = None
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(KARACHI_TZ))
 
-    # Internal: step counter incremented by emit_trace.
-    # Pydantic v2 requires PrivateAttr for mutable instance-level private state;
-    # a plain `_step_counter: int = 0` is treated as a class attribute and would
-    # raise on assignment.
     _step_counter: int = PrivateAttr(default=0)
 
     def next_step(self) -> int:

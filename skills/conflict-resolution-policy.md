@@ -11,24 +11,24 @@ Make the system autonomous when real-world failures happen (no-shows, cancellati
 
 | # | Event | Source | Resolver action |
 |---|---|---|---|
-| 1 | `no_show_detected` | APScheduler `noshow_watchdog_T+15min` | Exclude provider, re-rank, auto-rebook within the same time_window; notify user in their language. |
+| 1 | `no_show_detected` | APScheduler `noshow_watchdog_T+15min` | Exclude worker, re-rank, auto-rebook within the same time_window; notify user in their language. |
 | 2 | `user_cancellation` | `POST /bookings/{id}/cancel?rebook=true` | Release slot. If `rebook=true`, treat like a no-show (exclude original, find next). |
 | 3 | `provider_unavailable` | `POST /providers/{id}/unavailable` (proactive) | Same as no-show, but **before** the watchdog fires. |
-| 4 | `slot_conflict` | BookingAgent caught `SlotConflict` from `UNIQUE` constraint | Exclude that provider (or, for true races, keep them and just pick a different slot 30 min later); re-run from Discovery. |
-| 5 | `reschedule_requested` | User picks a new `time_window` in the app | Reload `parsed_intent`, replace `time_window`, do NOT exclude any provider; re-run Discovery → Ranking → Decision → Booking. |
+| 4 | `slot_conflict` | BookingAgent caught `SlotConflict` from `UNIQUE` constraint | Exclude that worker (or, for true races, keep them and just pick a different slot 30 min later); re-run from Discovery. |
+| 5 | `reschedule_requested` | User picks a new `time_window` in the app | Reload `parsed_intent`, replace `time_window`, do NOT exclude any worker; re-run Discovery to Ranking to Decision to Booking. |
 
 ## State delta (what the resolver mutates)
 
 ```python
 class RequestSession(BaseModel):
     ...
-    excluded_provider_ids: list[str] = []
+    excluded_worker_ids: list[str] = []
     resolution_attempts: int = 0
     triggered_by: Optional[str] = None    # e.g. "no_show_detected:provider_42"
 ```
 
 Rules:
-- **Always** append the failing provider to `excluded_provider_ids`. Never replace.
+- **Always** append the failing worker to `excluded_worker_ids`. Never replace.
 - **Always** increment `resolution_attempts`.
 - **Always** set `triggered_by` to the event key so downstream nodes know they're in `recover` phase.
 
@@ -52,7 +52,7 @@ This prevents infinite loops if the dataset has correlated failures.
 flowchart TB
     Start[Event received] --> Check{resolution_attempts < 3?}
     Check -- No --> HandOff[Hand off to user with top-3 alternatives]
-    Check -- Yes --> ExcludeWiden[Exclude failed provider; widen time_window if attempts >= 2]
+    Check -- Yes --> ExcludeWiden[Exclude failed worker; widen time_window if attempts >= 2]
     ExcludeWiden --> Rerun[Re-invoke Discovery to Ranking to Decision to Booking]
     Rerun --> Result{Booking succeeded?}
     Result -- Yes --> Notify[Send user 'auto-rebooked' message in their language]
@@ -81,7 +81,7 @@ async def handle(event: ConflictEvent):
 
     state.resolution_attempts += 1
     state.triggered_by = event.key
-    state.excluded_provider_ids.append(event.failed_provider_id) if event.failed_provider_id else None
+    state.excluded_worker_ids.append(event.failed_provider_id) if event.failed_provider_id else None
     state.parsed_intent.time_window = widen(state.parsed_intent.time_window, state.resolution_attempts)
 
     async with emit_trace(state, agent="ConflictResolverAgent", phase="recover",

@@ -166,14 +166,27 @@ def _rule_based_parse(raw_text: str, now: datetime) -> ParsedIntent:
     elif any(w in text for w in ["agle hafte", "next week", "whenever", "اگلے"]):
         urgency = "low"
 
-    # Location hint — pick any capitalized word or known area code
+    # Location hint — prefer sector codes (G-13, F-10, I-8 etc.) then first
+    # meaningful capitalized token, skipping Urdu/Roman-Urdu filler words.
+    _URDU_STOP = {
+        "mujhe", "mein", "main", "chahiye", "karein", "karo", "hai", "hain",
+        "aur", "ya", "ke", "ki", "ka", "ko", "se", "par", "kal", "subah",
+        "raat", "shaam", "abhi", "aj", "aaj", "please", "plz", "thoda",
+        "bahut", "shukriya", "bhi", "bhai", "ap", "aap", "yahan", "wahan",
+        "i", "a", "ac", "ok", "hi",
+    }
+    import re as _re
     location_hint = ""
-    for word in raw_text.split():
-        stripped = word.strip(".,!?")
-        if len(stripped) >= 2 and (stripped[0].isupper() or stripped.upper() == stripped):
-            if stripped.lower() not in {"i", "a", "ac", "ok", "hi"}:
-                location_hint = stripped
-                break
+    _sector = _re.search(r'\b([A-Z]-\d+(?:/\d+)?|[A-Z]{1,2}-\d+)\b', raw_text)
+    if _sector:
+        location_hint = _sector.group(1)
+    else:
+        for word in raw_text.split():
+            stripped = word.strip(".,!?")
+            if len(stripped) >= 2 and (stripped[0].isupper() or stripped.upper() == stripped):
+                if stripped.lower() not in _URDU_STOP:
+                    location_hint = stripped
+                    break
 
     # Time window
     time_window: TimeWindow | None = None

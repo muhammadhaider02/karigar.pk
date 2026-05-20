@@ -9,7 +9,7 @@ class Booking {
   final String slotEnd;
   final String status;
   final int priceEstimate;
-  final String? receiptPngPath;
+  final String? receiptUrl;
   final String createdAt;
 
   Booking({
@@ -23,7 +23,7 @@ class Booking {
     required this.slotEnd,
     required this.status,
     required this.priceEstimate,
-    this.receiptPngPath,
+    this.receiptUrl,
     required this.createdAt,
   });
 
@@ -38,7 +38,7 @@ class Booking {
         slotEnd: json['slot_end'] as String? ?? '',
         status: (json['status'] as String? ?? 'PENDING').toUpperCase(),
         priceEstimate: ((json['price_estimate'] ?? json['final_price'] ?? 0) as num).toInt(),
-        receiptPngPath: json['receipt_png_path'] as String?,
+        receiptUrl: json['receipt_url'] as String?,
         createdAt: json['created_at'] as String? ?? '',
       );
 

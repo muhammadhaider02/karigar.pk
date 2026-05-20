@@ -70,8 +70,8 @@ async def _handle_locked(state: RequestSession, event: dict) -> None:
     failed_provider_id = event.get("failed_provider_id")
     state.triggered_by = f"{event_key}:{failed_provider_id}" if failed_provider_id else event_key
 
-    if failed_provider_id and failed_provider_id not in state.excluded_provider_ids:
-        state.excluded_provider_ids.append(failed_provider_id)
+    if failed_provider_id and failed_provider_id not in state.excluded_worker_ids:
+        state.excluded_worker_ids.append(failed_provider_id)
 
     logger.info(
         "Conflict resolution attempt %d/%d for session %s (event=%s)",

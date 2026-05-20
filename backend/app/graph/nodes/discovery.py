@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.graph.state import RequestSession, ServiceType
+from app.graph.state import GeoPoint, RequestSession, ServiceType
 from app.graph.trace import emit_trace
 from app.tools import get_tools
 
@@ -19,16 +19,23 @@ async def run(state: RequestSession) -> RequestSession:
         input={
             "location_hint": intent.location_hint,
             "service": intent.service_type.pretty_name,
-            "exclude": state.excluded_provider_ids,
+            "exclude": state.excluded_worker_ids,
         },
     ) as t:
-        # Step 1: Geocode
-        geo = await tools.geocoder.resolve(intent.location_hint or "Islamabad")
-        t.add_tool_call(
-            "Geocoder.resolve",
-            {"hint": intent.location_hint},
-            {"lat": geo.lat, "lng": geo.lng, "label": geo.label},
-        )
+        # Step 1: Resolve location — GPS override > geocoded hint > Islamabad default
+        if state.override_lat is not None and state.override_lng is not None:
+            geo = GeoPoint(lat=state.override_lat, lng=state.override_lng, label="Your location")
+            t.add_tool_call("GPS.override", {"lat": geo.lat, "lng": geo.lng}, {"label": geo.label})
+        elif intent.location_hint:
+            geo = await tools.geocoder.resolve(intent.location_hint)
+            t.add_tool_call(
+                "Geocoder.resolve",
+                {"hint": intent.location_hint},
+                {"lat": geo.lat, "lng": geo.lng, "label": geo.label},
+            )
+        else:
+            geo = GeoPoint(lat=33.6938, lng=73.0652, label="Islamabad")
+            t.add_tool_call("GPS.default", {}, {"label": geo.label})
 
         # Step 2: Search providers
         candidates = await tools.provider_store.search(
@@ -36,7 +43,7 @@ async def run(state: RequestSession) -> RequestSession:
             lat=geo.lat,
             lng=geo.lng,
             radius_km=5.0,
-            exclude=state.excluded_provider_ids,
+            exclude=state.excluded_worker_ids,
         )
         t.add_tool_call(
             "ProviderStore.search",
@@ -45,7 +52,7 @@ async def run(state: RequestSession) -> RequestSession:
                 "lat": geo.lat,
                 "lng": geo.lng,
                 "radius_km": 5.0,
-                "exclude": state.excluded_provider_ids,
+                "exclude": state.excluded_worker_ids,
             },
             {"count": len(candidates), "ids": [c.id for c in candidates]},
         )

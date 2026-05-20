@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, computed_field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # .env lives at repo root (one level above backend/)
@@ -17,18 +17,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── LLM ────────────────────────────────────────────────────────────────
+    # LLM
     google_api_key: str = Field(..., description="Google AI Studio key (Gemini)")
 
-    # ── Maps (optional) ────────────────────────────────────────────────────
+    # Maps (optional)
     google_maps_key: str = Field(default="", description="Google Maps Platform key")
 
-    @computed_field  # type: ignore[misc]
     @property
     def use_real_maps(self) -> bool:
         return bool(self.google_maps_key)
 
-    # ── Demo behaviour ─────────────────────────────────────────────────────
+    # Demo behaviour
     demo_mode: bool = Field(
         default=False,
         description="Cache 5 canonical Gemini responses to avoid quota issues",
@@ -43,26 +42,14 @@ class Settings(BaseSettings):
         description="Artificial delay (ms) between trace events in demo mode.",
     )
 
-    # ── Server ─────────────────────────────────────────────────────────────
+    # Server
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "info"
 
-    # ── Database ───────────────────────────────────────────────────────────
-    db_path: str = Field(
-        default="runtime/karigar.db",
-        description=(
-            "SQLite path relative to backend/. "
-            "Lives under backend/runtime/ (gitignored runtime output) "
-            "to keep it separate from backend/app/data/ (versioned source data)."
-        ),
-    )
-
-    @computed_field  # type: ignore[misc]
-    @property
-    def database_url(self) -> str:
-        # aiosqlite needs three slashes for relative paths
-        return f"sqlite+aiosqlite:///{self.db_path}"
+    # Database (Supabase — single source of truth)
+    supabase_url: str = Field(..., description="https://<ref>.supabase.co")
+    supabase_service_key: str = Field(..., description="service_role key — bypasses RLS")
 
 
 @lru_cache(maxsize=1)

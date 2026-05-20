@@ -5,6 +5,7 @@ Contract (source of truth for flutter-engineer):
 POST   /sessions                        → {session_id, status}
 GET    /sessions/{id}                   → full session snapshot (trace[])
 GET    /sessions/{id}/stream            → SSE stream of TraceEvent until done
+GET    /sessions/{id}/trace             → polling: list of trace events
 GET    /sessions/{id}/trace.md          → Markdown export of the trace
 GET    /bookings                        → list bookings for user_id query param
 POST   /bookings/{id}/cancel            → cancel (and optionally rebook)
@@ -12,9 +13,10 @@ POST   /bookings/{id}/arrived           → mark provider arrived (cancels watch
 POST   /bookings/{id}/complete          → mark COMPLETED
 POST   /providers/{id}/unavailable      → proactive conflict trigger
 POST   /sessions/{id}/reschedule        → reschedule with new time_window
-GET    /receipts/{booking_id}.png       → serve the PNG receipt for a booking
 GET    /notifier-log                    → mock WhatsApp message log
 GET    /health                          → {"status": "ok"}
+GET    /roles                           → [{id, display_name, worker_count}] all service categories
+GET    /workers?role=                   → [{id, name, rating, area, price_per_visit, phone}]
 """
 
 from __future__ import annotations
@@ -22,17 +24,17 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from pathlib import Path
+import uuid
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from app.events.bus import get_bus
 from app.graph import conflict_resolver, orchestrator
-from app.graph.state import BookingStatus, RequestSession, TraceEvent
+from app.graph.state import BookingStatus, RequestSession
 from app.tools import get_tools
 from app.tools import bookings as bookings_crud
 from app.scheduler.reminders import cancel_booking_jobs
@@ -40,8 +42,7 @@ from app.scheduler.reminders import cancel_booking_jobs
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# ── In-memory session store (keyed by session_id) ─────────────────────────────
-# Shared with conflict_resolver so it can reload state on events.
+# In-memory session store (keyed by session_id)
 _sessions = conflict_resolver._sessions
 
 
@@ -50,7 +51,10 @@ _sessions = conflict_resolver._sessions
 class StartSessionRequest(BaseModel):
     user_id: str
     raw_text: str
-    user_phone: str = "0300-000-0000"
+    user_phone: str = "0300-0000000"
+    language: str = "english"
+    lat: Optional[float] = None  # device GPS latitude
+    lng: Optional[float] = None  # device GPS longitude
 
 
 class StartSessionResponse(BaseModel):
@@ -89,21 +93,35 @@ async def health():
 
 @router.post("/sessions", response_model=StartSessionResponse)
 async def start_session(req: StartSessionRequest, background_tasks: BackgroundTasks):
-    import uuid
     session_id = str(uuid.uuid4())
 
-    # Register the SSE queue BEFORE we hand work off to the background task,
-    # otherwise a fast client that calls GET /sessions/{id}/stream immediately
-    # would race with the background task and get a 404.
+    # Register SSE queue before handing off
     get_bus().register_session(session_id)
 
-    # Register a placeholder session immediately so the web polling fallback
-    # can query /sessions/{id}/trace while the pipeline is still running.
+    # Register placeholder session so trace polling works immediately
     _sessions[session_id] = RequestSession(
         id=session_id,
         user_id=req.user_id,
         raw_text=req.raw_text,
+        override_lat=req.lat,
+        override_lng=req.lng,
     )
+
+    # Persist session row in Supabase so agent_traces FK is valid
+    try:
+        from app.db.supabase_client import get_supabase
+        supabase = await get_supabase()
+        await supabase.table("sessions").insert({
+            "id": session_id,
+            "customer_id": req.user_id,
+            "raw_text": req.raw_text,
+            "user_phone": req.user_phone,
+            "status": "running",
+        }).execute()
+    except Exception as exc:
+        # FK violation (test user without a customer row) or network error.
+        # In-memory pipeline still works; traces just won't persist.
+        logger.warning("Could not persist session row to Supabase: %s", exc)
 
     background_tasks.add_task(_run_graph_in_background, session_id, req)
 
@@ -123,11 +141,21 @@ async def _run_graph_in_background(session_id: str, req: StartSessionRequest) ->
         )
         _sessions[session_id] = updated_state
         conflict_resolver.register_session(updated_state)
+
+        # Mark session completed in Supabase
+        try:
+            from app.db.supabase_client import get_supabase
+            from datetime import datetime
+            supabase = await get_supabase()
+            await supabase.table("sessions").update({
+                "status": "completed",
+                "completed_at": datetime.utcnow().isoformat(),
+            }).eq("id", session_id).execute()
+        except Exception:
+            pass
+
         await bus.publish_done(session_id, "completed")
     except SlotConflict as exc:
-        # Happy path failed at the booking step → hand off to the conflict
-        # resolver via the event bus. Publishing here (rather than from
-        # booking.py) guarantees exactly one resolver flow per failure.
         logger.info(
             "SlotConflict on session %s (provider=%s); dispatching to resolver",
             session_id[:8],
@@ -140,12 +168,19 @@ async def _run_graph_in_background(session_id: str, req: StartSessionRequest) ->
             "slot_conflict",
             {"session_id": session_id, "failed_provider_id": exc.provider_id},
         )
-        # Do not publish_done here — the resolver will when it finishes.
     except Exception as exc:
         logger.error("Graph error for session %s: %s", session_id[:8], exc)
         partial = conflict_resolver.get_session(session_id)
         if partial:
             _sessions[session_id] = partial
+
+        try:
+            from app.db.supabase_client import get_supabase
+            supabase = await get_supabase()
+            await supabase.table("sessions").update({"status": "failed"}).eq("id", session_id).execute()
+        except Exception:
+            pass
+
         await bus.publish_done(session_id, f"error: {exc}")
 
 
@@ -265,8 +300,6 @@ async def provider_unavailable(provider_id: str, req: ProviderUnavailableRequest
     if not state or not state.booking:
         raise HTTPException(status_code=404, detail="Session or booking not found")
 
-    # Cancel the pending no-show watchdog + reminder so we don't double-fire
-    # a conflict event once the resolver has already kicked off.
     cancel_booking_jobs(state.booking.id)
     await bookings_crud.transition(state.booking.id, BookingStatus.CANCELLED)
     await get_bus().publish(
@@ -289,26 +322,72 @@ async def reschedule(session_id: str, req: RescheduleRequest):
     return {"status": "reschedule_queued"}
 
 
-@router.get("/receipts/{booking_id}.png")
-async def get_receipt(booking_id: str):
-    """Serve the PNG receipt for a booking by looking up its stored path.
-
-    This avoids the previous bug where the route guessed the filename
-    (full id + `.txt`) while the renderer wrote `<id[:8]>.txt`, and
-    avoids depending on the process's current working directory.
-    """
-    booking = await bookings_crud.get(booking_id)
-    if booking is None or not booking.receipt_png_path:
-        raise HTTPException(status_code=404, detail="Receipt not found")
-
-    receipt_path = Path(booking.receipt_png_path)
-    if not receipt_path.exists():
-        raise HTTPException(status_code=404, detail="Receipt file missing on disk")
-
-    return FileResponse(str(receipt_path), media_type="image/png")
-
-
 @router.get("/notifier-log")
 async def get_notifier_log():
     tools = get_tools()
     return await tools.notifier.get_log()
+
+
+@router.get("/roles")
+async def list_roles():
+    """Return all service categories with display names and live worker counts."""
+    from app.db.supabase_client import get_supabase
+    from app.graph.state import ServiceType, _SERVICE_DISPLAY
+
+    supabase = await get_supabase()
+    result = await supabase.rpc("get_role_counts").execute()
+
+    # Build a count map from the RPC result; fall back to 0 for any missing role.
+    count_map: dict[str, int] = {}
+    if result.data:
+        for row in result.data:
+            count_map[row["role"]] = row["worker_count"]
+
+    roles = []
+    for service_type in ServiceType:
+        if service_type == ServiceType.UNKNOWN:
+            continue
+        roles.append({
+            "id": service_type.value,
+            "display_name": _SERVICE_DISPLAY.get(service_type, service_type.value.replace("_", " ").title()),
+            "worker_count": count_map.get(service_type.value, 0),
+        })
+
+    # Sort by worker_count desc so most-available categories appear first.
+    roles.sort(key=lambda r: r["worker_count"], reverse=True)
+    return roles
+
+
+@router.get("/workers")
+async def list_workers_by_role(role: str = Query(..., description="ServiceType value, e.g. ac_technician")):
+    """Return workers for a given role ordered by rating descending."""
+    from app.db.supabase_client import get_supabase
+
+    supabase = await get_supabase()
+    result = (
+        await supabase.table("workers")
+        .select("id, full_name, rating, area, rate_per_hour, phone_number, home_lat, home_lng, skills, working_hours, busy_slots")
+        .contains("skills", [role])
+        .eq("verification_status", "verified")
+        .eq("is_available", True)
+        .order("rating", desc=True)
+        .execute()
+    )
+
+    workers = []
+    for row in (result.data or []):
+        workers.append({
+            "id": str(row["id"]),
+            "name": row.get("full_name", ""),
+            "rating": float(row.get("rating") or 0),
+            "area": row.get("area", ""),
+            "price_per_visit": int(row.get("rate_per_hour") or 0),
+            "phone": row.get("phone_number", ""),
+            "home_lat": float(row.get("home_lat") or 0),
+            "home_lng": float(row.get("home_lng") or 0),
+            "skills": row.get("skills") or [],
+            "working_hours": row.get("working_hours") or {},
+            "busy_slots": row.get("busy_slots") or [],
+        })
+
+    return workers

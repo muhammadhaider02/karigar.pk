@@ -42,9 +42,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     try {
       if (_isSignUp) {
         final res = await Supabase.instance.client.auth.signUp(
-          email: email, 
+          email: email,
           password: password,
-          data: {'full_name': _nameCtrl.text.trim()},
+          data: {'full_name': _nameCtrl.text.trim(), 'role': 'customer'},
         );
       } else {
         await Supabase.instance.client.auth.signInWithPassword(

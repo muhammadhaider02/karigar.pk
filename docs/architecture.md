@@ -1,7 +1,7 @@
 # Karigar: Architecture Deep-Dive
 
 > Detailed technical reference for engineers working in the repo.
-> For project intro, see [`/README.md`](../README.md). For the spec, see [`/plan.md`](../plan.md). For the brief-deliverable README, see [`README.md`](README.md).
+> For project intro, see [`/README.md`](../README.md). For the spec, see [`/docs/plan.md`](plan.md). For the brief-deliverable README, see [`README.md`](README.md).
 
 ## 1. System diagram
 
@@ -46,7 +46,7 @@ flowchart TB
     Booking -->|tool| Books[Bookings]
     Booking -->|tool| Notif[Notifier]
 
-    Books --> DB[(SQLite)]
+    Books --> DB[(Supabase Postgres)]
     AvailHold --> DB
 ```
 
@@ -71,12 +71,12 @@ class RequestSession(BaseModel):
     trace: list[TraceEvent] = []                     # append-only
 
     # Conflict-resolution state
-    excluded_provider_ids: list[str] = []            # append-only
+    excluded_worker_ids: list[str] = []              # append-only
     resolution_attempts: int = 0
-    triggered_by: Optional[str] = None               # e.g. "no_show_detected:provider_42"
+    triggered_by: Optional[str] = None              # e.g. "no_show_detected:provider_42"
 
     # Snapshot of the user's original window at first conflict so the resolver
-    # widens *relative to it* (rather than cumulatively widening the already-
+    # widens relative to it (rather than cumulatively widening the already-
     # widened window each retry).
     original_time_window: Optional[TimeWindow] = None
 
@@ -93,13 +93,11 @@ purposes. The split is deliberate and load-bearing:
 | Path | Purpose | Versioned? | Touched by |
 |---|---|---|---|
 | `backend/app/data/` | **Source data** that ships with the app: `providers.json` (the 25 seed providers), `seed.py` (the seeder script). Importable as a Python package. | YES | Edited by devs; read by `JsonProviderStore` and `seed.py` |
-| `backend/runtime/` | **Runtime output** generated at boot/runtime: `karigar.db` (SQLite), `notifier-log.jsonl` (mock WhatsApp messages), `receipts/*.png`, `seed-report.md`, `traces/*.md` (e2e exports). | **NO** (gitignored in `.gitignore`) | Written by the backend at runtime; safe to delete |
+| `backend/runtime/` | **Runtime output** generated at boot/runtime: `notifier-log.jsonl` (mock WhatsApp messages), `seed-report.md`, `traces/*.md` (e2e exports). | **NO** (gitignored in `.gitignore`) | Written by the backend at runtime; safe to delete |
 
 `backend/runtime/` is wiped by the `/seed-mock` workflow and is regenerated
-on every fresh run. If you ever see code referencing `data/karigar.db`
-(without the `runtime/` prefix) it's a bug; older versions of the project
-used a single `backend/data/` folder for both source and runtime, which was
-confusing.
+on every fresh run. Receipts are uploaded to Supabase Storage (`receipts` bucket)
+and served via public URL; no receipt files are written locally.
 
 ## 3. Tool protocols (swappable)
 
@@ -120,7 +118,7 @@ class Distance(Protocol):
 
 class Availability(Protocol):
     async def check_and_hold(
-        self, provider_id: str, slot_start: datetime,
+        self, worker_id: str, slot_start: datetime,
         slot_end: datetime, user_id: str,
     ) -> Booking: ...
 
@@ -133,12 +131,12 @@ class Search(Protocol):
 
 ### Implementations
 
-| Protocol | Mock | Real |
+| Protocol | Default | Real / alternate |
 |---|---|---|
 | Geocoder | `MockGeocoder`: Islamabad sector lookup table | `GoogleGeocoder`: Geocoding API |
-| ProviderStore | `JsonProviderStore`: reads `app/data/providers.json` (source data, versioned) | `GooglePlacesStore`: Places Nearby Search |
+| ProviderStore | `SupabaseProviderStore`: queries the `workers` table (always primary) | `JsonProviderStore`: reads `app/data/providers.json` (local fallback) |
 | Distance | `HaversineDistance` | `GoogleDistanceMatrix` |
-| Availability | `SqliteAvailability` (the only impl: uses DB at `runtime/karigar.db`) | (same) |
+| Availability | `SupabaseAvailability`: reads/writes `bookings` table in Supabase | (same) |
 | Notifier | `MockNotifier`: appends to `runtime/notifier-log.jsonl` and exposes `GET /notifier-log` for the Flutter app | (no real backend; WhatsApp Business API would replace this) |
 | Search | `AntigravityBrowserSearch` (default) | `GeminiGroundedSearch` (fallback when running outside Antigravity) |
 
@@ -179,38 +177,51 @@ The Conflict Resolver subscribes to all five and dispatches them through a singl
 
 Events are also written to the `conflict_events` table for the trace export.
 
-## 5. Database schema
+## 5. Database schema (Supabase Postgres)
 
 ```mermaid
 erDiagram
-    providers ||--o{ bookings : "provider_id"
+    customers ||--o{ bookings : "customer_id"
+    workers ||--o{ bookings : "worker_id"
     bookings ||--o{ agent_traces : "session_id"
     bookings ||--o{ conflict_events : "booking_id"
 
-    providers {
-        string id PK
-        string name
-        json services
-        float lat
-        float lng
+    customers {
+        uuid id PK
+        uuid auth_user_id FK
+        string full_name
+        string phone
+        string role
+        datetime created_at
+    }
+    workers {
+        uuid id PK
+        uuid auth_user_id FK
+        string full_name
+        string phone
+        string[] skills
+        float home_lat
+        float home_lng
         float rating
         int price_per_visit
-        string phone
-        json working_hours
-        json busy_slots
+        string verification_status
+        bool is_available
+        datetime created_at
     }
     bookings {
-        string id PK
-        string user_id
-        string provider_id FK
+        uuid id PK
+        uuid customer_id FK
+        uuid worker_id FK
         string session_id
         string service_type
         datetime slot_start
         datetime slot_end
         string status
         int price_estimate
+        int final_price
         datetime created_at
-        string receipt_png_path
+        datetime confirmed_at
+        string receipt_url
     }
     agent_traces {
         int id PK
@@ -236,13 +247,13 @@ erDiagram
     }
 ```
 
-The critical constraint: `UNIQUE(provider_id, slot_start)` on `bookings`. This is the entire atomic-hold mechanism.
+The critical constraint: `UNIQUE(worker_id, slot_start)` on `bookings` (implemented as partial unique index `uq_worker_slot` in Supabase). This is the entire atomic-hold mechanism.
 
 ## 6. HTTP / SSE contract
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| `POST` | `/sessions` | `{user_id, raw_text}` | `{session_id, status}` |
+| `POST` | `/sessions` | `{user_id, raw_text, lat?, lng?}` | `{session_id, status}` |
 | `GET` | `/sessions/{id}` | - | full session snapshot |
 | `GET` | `/sessions/{id}/stream` | - | SSE stream of `TraceEvent` until terminal step |
 | `GET` | `/sessions/{id}/trace.md` | - | Markdown export of the trace |
@@ -252,8 +263,11 @@ The critical constraint: `UNIQUE(provider_id, slot_start)` on `bookings`. This i
 | `POST` | `/bookings/{id}/complete` | - | Marks `COMPLETED` |
 | `POST` | `/providers/{id}/unavailable` | `{session_id}` | Triggers proactive conflict |
 | `POST` | `/sessions/{id}/reschedule` | `{new_time_window}` | Publishes `reschedule_requested` |
-| `GET` | `/receipts/{booking_id}.png` | - | The receipt PNG |
 | `GET` | `/notifier-log` | - | Mock WhatsApp message log (for the faux-WhatsApp screen) |
+| `GET` | `/roles` | - | All service categories with display names and live worker counts |
+| `GET` | `/workers?role=` | - | Workers for a given role ordered by rating desc |
+
+Receipts are served directly from Supabase Storage via their public URL stored in `bookings.receipt_url`.
 
 ### SSE event format
 
@@ -273,7 +287,7 @@ data: {"session_id":"...","status":"completed"}
 Gemini 2.5 handles all three languages natively. No translation layer.
 
 1. `IntentAgent` sets `parsed_intent.language` based on the input.
-2. `DecisionAgent` and `ConflictResolverAgent` are instructed to respond *in `parsed_intent.language`*: their prompts include the language enum.
+2. `DecisionAgent` and `ConflictResolverAgent` are instructed to respond in `parsed_intent.language`: their prompts include the language enum.
 3. `Notifier` templates are indexed by language (`TEMPLATES["roman_ur"]`, `TEMPLATES["ur"]`, `TEMPLATES["en"]`).
 4. Flutter wraps Urdu strings in `Directionality(textDirection: TextDirection.rtl)` and uses Noto Nastaliq Urdu for that script.
 
@@ -302,7 +316,6 @@ class AntigravityBrowserSearch:
     """
     async def lookup(self, query: str) -> list[SearchSnippet]:
         if running_inside_antigravity():
-            # invokes Antigravity's runtime Browser API
             return await antigravity_browser.search(query, max_results=3)
         return await self._gemini_fallback(query)
 ```
@@ -321,4 +334,4 @@ This is what makes Antigravity "central to runtime", not just dev: the brief's e
 | No-show watchdog never fires | `DEMO_TIME_SCALE` not set; or APScheduler not started in `app/main.py::startup` |
 | SSE stream cuts off | Reverse-proxy buffering: bypass `nginx` for `/sessions/*/stream` |
 | Flutter shows English when user spoke Urdu | `parsed_intent.language` is being overwritten somewhere; trace each node's `output.language` |
-| Resolution loop runs > 3 times | `state.resolution_attempts` isn't being persisted between event handlings; check `sessions.save` calls in `conflict_resolver.py` |
+| Resolution loop runs > 3 times | `state.resolution_attempts` is not being persisted between event handlings; check `sessions.save` calls in `conflict_resolver.py` |

@@ -12,13 +12,12 @@ The context manager:
   - Auto-increments the step counter on state
   - Appends a TraceEvent to state.trace
   - Publishes the event to the SSE bus for live streaming
-  - Persists the event to agent_traces table
+  - Persists the event to agent_traces table in Supabase
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
@@ -48,16 +47,8 @@ class _TraceContext:
         self._output: dict[str, Any] = {}
         self._reasoning: str = ""
 
-    def add_tool_call(
-        self,
-        name: str,
-        args: dict,
-        result: Any,
-        latency_ms: int = 0,
-    ) -> None:
-        self._tool_calls.append(
-            ToolCall(name=name, args=args, result=result, latency_ms=latency_ms)
-        )
+    def add_tool_call(self, name: str, args: dict, result: Any, latency_ms: int = 0) -> None:
+        self._tool_calls.append(ToolCall(name=name, args=args, result=result, latency_ms=latency_ms))
 
     def set_output(self, output: dict) -> None:
         self._output = output
@@ -111,9 +102,9 @@ async def emit_trace(
             from app.events.bus import get_bus
             await get_bus().publish_trace(state.id, event)
         except Exception:
-            pass  # Never let trace publishing crash the node
+            pass
 
-        # Persist to DB (non-blocking)
+        # Persist to Supabase (non-blocking)
         try:
             await _persist_trace(state.id, event)
         except Exception:
@@ -130,25 +121,19 @@ async def emit_trace(
 
 
 async def _persist_trace(session_id: str, event: TraceEvent) -> None:
-    from app.db.models import AgentTraceModel
-    from app.db.session import get_raw_session
+    from app.db.supabase_client import get_supabase
+    import json
 
-    row = AgentTraceModel(
-        session_id=session_id,
-        step=event.step,
-        agent=event.agent,
-        phase=event.phase,
-        input_data=json.dumps(event.input, ensure_ascii=False, default=str),
-        output_data=json.dumps(event.output, ensure_ascii=False, default=str),
-        tool_calls=json.dumps(
-            [tc.model_dump() for tc in event.tool_calls],
-            ensure_ascii=False,
-            default=str,
-        ),
-        latency_ms=event.latency_ms,
-        reasoning=event.reasoning,
-        triggered_by=event.triggered_by,
-    )
-    async with await get_raw_session() as db:
-        async with db.begin():
-            db.add(row)
+    supabase = await get_supabase()
+    await supabase.table("agent_traces").insert({
+        "session_id": session_id,
+        "step": event.step,
+        "agent": event.agent,
+        "phase": event.phase,
+        "input_data": event.input,
+        "output_data": event.output,
+        "tool_calls": [tc.model_dump() for tc in event.tool_calls],
+        "latency_ms": event.latency_ms,
+        "reasoning": event.reasoning,
+        "triggered_by": event.triggered_by,
+    }).execute()

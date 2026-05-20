@@ -98,11 +98,11 @@ class Tools:
 def build_tools() -> Tools:
     """Return the active tool implementations based on env settings."""
     from app.config import get_settings
-    from app.tools.availability import SqliteAvailability
+    from app.tools.availability import SupabaseAvailability
     from app.tools.distance import HaversineDistance
     from app.tools.geocoder import MockGeocoder
     from app.tools.notifier import MockNotifier
-    from app.tools.providers import JsonProviderStore
+    from app.tools.providers import SupabaseProviderStore
     from app.tools.search import AntigravityBrowserSearch
 
     settings = get_settings()
@@ -112,24 +112,23 @@ def build_tools() -> Tools:
     distance: Distance
 
     if settings.use_real_maps:
-        # Real Google APIs — imported lazily to avoid hard dependency
         from app.tools.geocoder import GoogleGeocoder  # type: ignore
         from app.tools.distance import GoogleDistanceMatrix  # type: ignore
-        from app.tools.providers import GooglePlacesStore  # type: ignore
 
         geocoder = GoogleGeocoder(api_key=settings.google_maps_key)
-        provider_store = GooglePlacesStore(api_key=settings.google_maps_key)
         distance = GoogleDistanceMatrix(api_key=settings.google_maps_key)
     else:
         geocoder = MockGeocoder()
-        provider_store = JsonProviderStore()
         distance = HaversineDistance()
+
+    # Always use Supabase workers — Google Places returns unregistered businesses
+    provider_store = SupabaseProviderStore()
 
     return Tools(
         geocoder=geocoder,
         provider_store=provider_store,
         distance=distance,
-        availability=SqliteAvailability(),
+        availability=SupabaseAvailability(),
         notifier=MockNotifier(),
         search=AntigravityBrowserSearch(),
     )

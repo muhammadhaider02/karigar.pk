@@ -7,34 +7,37 @@
 
 Simulate a real-world booking end-to-end (this is the critical 15% rubric item):
 1. Atomically hold a slot (no double-bookings).
-2. Persist the booking to SQLite.
-3. Generate a receipt.
+2. Persist the booking to Supabase.
+3. Generate a receipt and upload it to Supabase Storage.
 4. Send a faux-WhatsApp confirmation.
 5. Hand off to FollowupAgent.
 
 ## Database schema
 
-```python
-# backend/app/db/models.py
-class Booking(Base):
-    __tablename__ = "bookings"
-    id: Mapped[str] = mapped_column(primary_key=True)   # ulid
-    user_id: Mapped[str]
-    provider_id: Mapped[str]
-    service_type: Mapped[str]
-    slot_start: Mapped[datetime]
-    slot_end: Mapped[datetime]
-    status: Mapped[str]                                  # PENDING | CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
-    price_estimate: Mapped[int]
-    created_at: Mapped[datetime] = mapped_column(default=func.now())
-    receipt_png_path: Mapped[Optional[str]]
+```sql
+-- Supabase: bookings table
+-- Unique constraint: uq_worker_slot ON bookings(worker_id, slot_start)
+CREATE TABLE bookings (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id UUID REFERENCES customers(id),
+    worker_id   UUID REFERENCES workers(id),
+    session_id  TEXT,
+    service_type TEXT,
+    slot_start  TIMESTAMPTZ NOT NULL,
+    slot_end    TIMESTAMPTZ NOT NULL,
+    status      TEXT NOT NULL,   -- worker_assigned | worker_accepted | en_route | arrived | in_progress | completed | cancelled | no_show
+    price_estimate INT,
+    final_price INT,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    confirmed_at TIMESTAMPTZ,
+    receipt_url TEXT
+);
 
-    __table_args__ = (
-        UniqueConstraint("provider_id", "slot_start", name="uq_provider_slot"),
-    )
+CREATE UNIQUE INDEX uq_worker_slot ON bookings(worker_id, slot_start)
+    WHERE status NOT IN ('cancelled', 'no_show');
 ```
 
-The `UNIQUE(provider_id, slot_start)` constraint is the **only** mechanism that prevents double-booking. Trust the DB.
+The `UNIQUE(worker_id, slot_start)` partial index is the **only** mechanism that prevents double-booking. Trust the DB.
 
 ## Atomic hold pattern
 
@@ -42,23 +45,25 @@ The `UNIQUE(provider_id, slot_start)` constraint is the **only** mechanism that 
 # backend/app/tools/availability.py
 class SlotConflict(Exception): ...
 
-async def check_and_hold(provider_id: str, slot_start: datetime, slot_end: datetime, user_id: str) -> Booking:
-    async with session.begin():
-        booking = Booking(
-            id=str(ulid.new()),
-            user_id=user_id,
-            provider_id=provider_id,
-            slot_start=slot_start,
-            slot_end=slot_end,
-            status="PENDING",
+async def check_and_hold(worker_id: str, slot_start: datetime, slot_end: datetime, ...) -> BookingRecord:
+    supabase = await get_supabase()
+    try:
+        result = await supabase.table("bookings").insert({
+            "id": str(uuid4()),
+            "worker_id": worker_id,
+            "slot_start": slot_start.isoformat(),
+            "slot_end": slot_end.isoformat(),
+            "status": "worker_assigned",
             ...
-        )
-        session.add(booking)
-        try:
-            await session.flush()           # triggers the UNIQUE constraint
-        except IntegrityError as e:
-            raise SlotConflict(provider_id, slot_start) from e
-    return booking
+        }).execute()
+    except Exception as exc:
+        err = str(exc)
+        if "uq_worker_slot" in err or "23505" in err:
+            raise SlotConflict(worker_id=worker_id, slot_start=slot_start) from exc
+        # Non-slot-conflict errors are logged and fall through (best-effort write)
+        import logging
+        logging.getLogger(__name__).warning("Booking INSERT skipped (non-fatal): %s", exc)
+    return BookingRecord(...)
 ```
 
 Never check-then-insert with two separate queries: that's the race condition the resolver was built to catch, but we shouldn't rely on the resolver as a happy-path mechanism.
@@ -71,7 +76,7 @@ async def run(state: RequestSession) -> RequestSession:
     async with emit_trace(state, agent="BookingAgent", phase="act", input={"provider_id": state.chosen.id}) as t:
         try:
             booking = await availability.check_and_hold(
-                provider_id=state.chosen.id,
+                worker_id=state.chosen.id,
                 slot_start=state.chosen.slot_start,
                 slot_end=state.chosen.slot_end,
                 user_id=state.user_id,
@@ -79,14 +84,14 @@ async def run(state: RequestSession) -> RequestSession:
             t.add_tool_call("Availability.check_and_hold", {...}, {"booking_id": booking.id})
         except SlotConflict as e:
             t.add_tool_call("Availability.check_and_hold", {...}, {"error": "SlotConflict"})
-            await bus.publish("slot_conflict", {"session_id": state.id, "provider_id": e.provider_id})
+            await bus.publish("slot_conflict", {"session_id": state.id, "provider_id": e.worker_id})
             raise
 
-        booking.status = "CONFIRMED"
-        receipt_path = await bookings.render_receipt(booking, state.chosen)
-        booking.receipt_png_path = receipt_path
+        booking.status = "worker_accepted"
+        receipt_url = await bookings.render_and_upload_receipt(booking, state.chosen, state.parsed_intent.location_hint)
+        booking.receipt_url = receipt_url
         await bookings.persist(booking)
-        t.add_tool_call("Bookings.create", {...}, {"booking_id": booking.id, "status": "CONFIRMED"})
+        t.add_tool_call("Bookings.create", {...}, {"booking_id": booking.id, "status": "worker_accepted"})
 
         msg = build_whatsapp_message(booking, state.chosen, state.parsed_intent.language)
         await notifier.send(channel="whatsapp_mock", to=state.user_phone, message=msg)
@@ -101,7 +106,7 @@ async def run(state: RequestSession) -> RequestSession:
 
 ## Receipt rendering
 
-`backend/app/tools/bookings.py::render_receipt` produces a PNG at `backend/runtime/receipts/<booking_id>.png` using PIL. Layout (text-only, no logos to keep dependencies minimal):
+`backend/app/tools/bookings.py::render_and_upload_receipt` produces a PNG using PIL, uploads it to the Supabase Storage `receipts` bucket and returns the public URL. The URL is stored in `bookings.receipt_url`. Layout (text-only, no logos to keep dependencies minimal):
 
 ```
 KARIGAR: BOOKING CONFIRMATION
@@ -109,7 +114,7 @@ KARIGAR: BOOKING CONFIRMATION
 Booking ID:   {booking.id[:8]}
 Service:      {ServiceType.pretty(booking.service_type)}   # "AC Technician", not "ac_technician"
 Provider:     {provider.name}
-Phone:        {provider.phone}        # synthetic 03XX-XXXXXXX
+Phone:        {provider.phone}        # synthetic 03XX-XXXXXXX (row omitted if empty)
 Date:         {slot_start.strftime('%a, %d %b %Y')}
 Time:         {slot_start.strftime('%H:%M')} - {slot_end.strftime('%H:%M')}
 Location:     {location_hint}
@@ -119,7 +124,7 @@ Status:       CONFIRMED
 Issued at:    {now.strftime('%H:%M, %d %b')}
 ```
 
-The path is returned to the Flutter app via the booking response; the app fetches it from `GET /receipts/{booking_id}.png`.
+The public URL is returned in the booking response body. The Flutter app loads it directly from Supabase Storage.
 
 ## Faux-WhatsApp message format
 
@@ -148,12 +153,12 @@ The Flutter app renders this exact string inside its faux-WhatsApp `screens/conf
 ## Booking statuses + transitions
 
 ```
-PENDING -> CONFIRMED -> COMPLETED
-PENDING -> CONFIRMED -> NO_SHOW
-PENDING -> CONFIRMED -> CANCELLED
+worker_assigned -> worker_accepted -> arrived -> in_progress -> completed
+worker_assigned -> worker_accepted -> cancelled
+worker_assigned -> worker_accepted -> no_show
 ```
 
-State transitions live in `backend/app/tools/bookings.py::transition`. Only `CONFIRMED` → anything is reachable from production code; `PENDING` is transient (only exists inside `check_and_hold`).
+State transitions live in `backend/app/tools/bookings.py::transition`. Only `worker_accepted` onwards is reachable from production code; `worker_assigned` is transient (only exists inside `check_and_hold`).
 
 ## API endpoints
 
@@ -161,13 +166,14 @@ State transitions live in `backend/app/tools/bookings.py::transition`. Only `CON
 |---|---|---|
 | `POST` | `/bookings/{id}/cancel?rebook={true|false}` | User cancels. If `rebook=true`, publishes `user_cancellation` event so the resolver finds an alternative. |
 | `GET` | `/bookings` | List bookings for the current user (optional filter by status). |
-| `GET` | `/receipts/{booking_id}.png` | Serves the receipt PNG. |
 | `POST` | `/bookings/{id}/arrived` | Marks the provider as arrived (cancels the no-show watchdog). |
-| `POST` | `/bookings/{id}/complete` | Marks `COMPLETED`; APScheduler also triggers this if no one calls it within `T+2h`. |
+| `POST` | `/bookings/{id}/complete` | Marks `completed`; APScheduler also triggers this if no one calls it within `T+2h`. |
+
+Receipts are served directly from Supabase Storage via `bookings.receipt_url`.
 
 ## Edge cases
 
-- **`SlotConflict` on first try** → see Conflict Resolver skill. Treat it like any other conflict event.
-- **Provider phone missing in mock data** → never happens with our seed, but if it does, fall back to `"0300-000-0000"` and log a warning.
-- **Receipt render fails** → still persist the booking; `receipt_png_path = None`; Flutter shows a fallback receipt rendered client-side.
-- **Notifier send fails** → log + emit a `tool_call` with `result={"error": "..."}`; booking is still `CONFIRMED`. We do **not** roll back (confirmation can be re-sent).
+- **`SlotConflict` on first try** -> see Conflict Resolver skill. Treat it like any other conflict event.
+- **Provider phone missing** -> skip the Phone row on the receipt rather than printing a placeholder. Log a warning.
+- **Receipt render fails** -> still persist the booking; `receipt_url = None`; Flutter shows a fallback receipt rendered client-side.
+- **Notifier send fails** -> log + emit a `tool_call` with `result={"error": "..."}`; booking is still confirmed. We do **not** roll back (confirmation can be re-sent).

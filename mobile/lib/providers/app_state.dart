@@ -112,29 +112,21 @@ class AppState extends ChangeNotifier {
         proofOfSkillUrls.add(supa.storage.from('skill-proofs').getPublicUrl(path));
       }
 
-      // Update profile
-      await supa.from('profiles').update({
-        'role': 'worker',
-        if (workerRegistrationData.fullName.isNotEmpty) 'full_name': workerRegistrationData.fullName,
-        if (workerRegistrationData.phone.isNotEmpty) 'phone_number': workerRegistrationData.phone,
-        if (avatarUrl != null) 'profile_photo_url': avatarUrl,
-        if (workerRegistrationData.district.isNotEmpty) 'district': workerRegistrationData.district,
-      }).eq('id', uid);
-
-      // Upsert worker profile
-      // Schema NOT NULL: cnic_number, cnic_front_url, cnic_back_url, profile_photo_url,
-      //                  skills[], district, area, home_address, rate_per_hour, verification_status
+      // Upsert into unified workers table (auth_user_id links to auth.users)
       final primaryArea = workerRegistrationData.areas.isNotEmpty
           ? workerRegistrationData.areas.first
           : workerRegistrationData.district;
-      await supa.from('worker_profiles').upsert({
-        'id': uid,
+      await supa.from('workers').upsert({
+        'auth_user_id': uid,
+        'full_name': workerRegistrationData.fullName,
+        'phone_number': workerRegistrationData.phone,
         'cnic_number': workerRegistrationData.cnic,
         'cnic_front_url': cnicFrontUrl,
         'cnic_back_url': cnicBackUrl,
         'profile_photo_url': avatarUrl,
         'skills': workerRegistrationData.skills.toList(),
         'rate_per_hour': workerRegistrationData.hourlyRate.toInt(),
+        'minimum_charge': workerRegistrationData.hourlyRate.toInt(),
         'district': workerRegistrationData.district,
         'area': primaryArea,
         'home_address': workerRegistrationData.address,
@@ -142,15 +134,24 @@ class AppState extends ChangeNotifier {
         if (proofOfSkillUrls.isNotEmpty) 'proof_of_skill_urls': proofOfSkillUrls,
         if (workerRegistrationData.homeLat != null) 'home_lat': workerRegistrationData.homeLat,
         if (workerRegistrationData.homeLng != null) 'home_lng': workerRegistrationData.homeLng,
-      });
+      }, onConflict: 'auth_user_id');
 
-      // Insert service areas
+      // Mark user as worker in metadata so fetchUserRole() works without a DB call
+      await supa.auth.updateUser(UserAttributes(data: {'role': 'worker'}));
+
+      // Insert service areas — worker_id is the UUID from workers (not uid)
       if (workerRegistrationData.areas.isNotEmpty) {
+        final workerRow = await supa
+            .from('workers')
+            .select('id')
+            .eq('auth_user_id', uid)
+            .single();
+        final workerId = workerRow['id'] as String;
         final areaInserts = workerRegistrationData.areas.map((area) => {
-          'worker_id': uid,
+          'worker_id': workerId,
           'district': workerRegistrationData.district,
           'area': area,
-          'is_primary': false,
+          'is_primary': area == workerRegistrationData.areas.first,
         }).toList();
         await supa.from('worker_service_areas').insert(areaInserts);
       }
@@ -176,7 +177,7 @@ class AppState extends ChangeNotifier {
         final uid = Supabase.instance.client.auth.currentUser?.id;
         if (uid != null) {
           await Supabase.instance.client
-              .from('profiles')
+              .from('customers')
               .update({'language': lang})
               .eq('id', uid);
         }
@@ -194,32 +195,23 @@ class AppState extends ChangeNotifier {
   String get _userId =>
       Supabase.instance.client.auth.currentUser?.id ?? 'anonymous';
 
-  // Fetch role + language from profiles for the signed-in user.
-  // Called by splash to decide which dashboard to route to.
+  // Read role from user_metadata (set at signup / worker registration).
+  // No DB query needed — role lives in auth.users.user_metadata.
   Future<String?> fetchUserRole() async {
     try {
-      final uid = Supabase.instance.client.auth.currentUser?.id;
-      if (uid == null) return null;
-      final rows = await Supabase.instance.client
-          .from('profiles')
-          .select('role, language')
-          .eq('id', uid)
-          .limit(1);
-      if (rows is List && rows.isNotEmpty) {
-        final m = rows.first as Map<String, dynamic>;
-        final lang = m['language'] as String?;
-        if (lang != null && lang.isNotEmpty) {
-          _language = lang;
-        }
-        return m['role'] as String?;
-      }
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return null;
+      final meta = user.userMetadata;
+      final lang = meta?['language'] as String?;
+      if (lang != null && lang.isNotEmpty) _language = lang;
+      return meta?['role'] as String?;
     } catch (e) {
       debugPrint('fetchUserRole failed: $e');
     }
     return null;
   }
 
-  Future<void> startBookingFlow(String query) async {
+  Future<void> startBookingFlow(String query, {double? lat, double? lng}) async {
     _currentQuery = query;
     _traceEvents.clear();
     _recommendedProviders.clear();
@@ -232,11 +224,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Start session on the backend
+      // 1. Start session on the backend — pass GPS coords so DiscoveryAgent can
+      //    skip geocoding when the query contains no explicit location.
       final sessionId = await _api.startSession(
         userId: _userId,
         rawText: query,
         language: _language,
+        lat: lat ?? _customerLat,
+        lng: lng ?? _customerLng,
       );
       _currentSessionId = sessionId;
 
@@ -341,6 +336,7 @@ class AppState extends ChangeNotifier {
       const validEnums = {
         'plumber','electrician','ac_technician','carpenter','painter',
         'cleaner','mason','welder','pest_control','appliance_repair',
+        'tutor','beautician',
       };
       if (!validEnums.contains(serviceType)) serviceType = 'plumber';
 
@@ -466,11 +462,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final supa = Supabase.instance.client;
-      // worker_profiles.skills is text[]; use contains operator
+      // workers.skills is service_category[]; full_name and phone_number are direct columns
       var query = supa
-          .from('worker_profiles')
-          .select('id, skills, rate_per_hour, district, area, home_lat, home_lng, rating, total_reviews, profile_photo_url, profiles(full_name, phone_number)')
-          .contains('skills', [serviceType]);
+          .from('workers')
+          .select('id, skills, rate_per_hour, district, area, home_lat, home_lng, rating, total_reviews, profile_photo_url, full_name, phone_number')
+          .contains('skills', [serviceType])
+          .eq('verification_status', 'verified');
       if (area != null && area.isNotEmpty) {
         query = query.eq('area', area);
       }
@@ -479,8 +476,7 @@ class AppState extends ChangeNotifier {
       final List<ProviderModel> built = [];
       for (final row in (rows as List)) {
         final m = row as Map<String, dynamic>;
-        final prof = (m['profiles'] is Map) ? m['profiles'] as Map<String, dynamic> : <String, dynamic>{};
-        final name = (prof['full_name'] as String?) ?? 'Worker';
+        final name = (m['full_name'] as String?) ?? 'Worker';
         final wLat = (m['home_lat'] ?? 0.0).toDouble();
         final wLng = (m['home_lng'] ?? 0.0).toDouble();
         final dist = (_customerLat != null && _customerLng != null && wLat != 0.0)
@@ -494,7 +490,7 @@ class AppState extends ChangeNotifier {
           lng: wLng,
           rating: (m['rating'] ?? 0.0).toDouble(),
           pricePerVisit: (m['rate_per_hour'] ?? 0) as int,
-          phone: (prof['phone_number'] as String?) ?? '',
+          phone: (m['phone_number'] as String?) ?? '',
           distanceKm: dist,
           score: (m['rating'] ?? 0.0).toDouble(),
           reasoning: '${m['area'] ?? ''}, ${m['district'] ?? ''} · ${m['total_reviews'] ?? 0} reviews',
@@ -515,18 +511,27 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Worker-side dashboard stats — computed from bookings + worker_profiles.
+  // Worker-side dashboard stats — computed from bookings + workers.
   // Returns: {todayEarnings, weekEarnings, jobsToday, rating, totalReviews, jobsCompleted}
   Future<Map<String, dynamic>> loadWorkerStats() async {
     final supa = Supabase.instance.client;
     final uid = supa.auth.currentUser?.id;
     if (uid == null) return {};
     try {
+      // Resolve auth UID → workers.id (auto-generated UUID)
+      final workerRow = await supa
+          .from('workers')
+          .select('id')
+          .eq('auth_user_id', uid)
+          .maybeSingle();
+      if (workerRow == null) return {};
+      final workerId = workerRow['id'] as String;
+
       // Fetch completed bookings for this worker (price + completed_at)
       final bookings = await supa
           .from('bookings')
           .select('price_estimate, final_price, completed_at, status')
-          .eq('worker_id', uid)
+          .eq('worker_id', workerId)
           .eq('status', 'completed');
 
       final now = DateTime.now();
@@ -547,11 +552,11 @@ class AppState extends ChangeNotifier {
         if (completed.isAfter(weekStart)) { weekEarn += price; jobsWeek++; }
       }
 
-      // Worker profile for rating + total counts
+      // Worker profile for rating + total counts (workers.auth_user_id = uid)
       final profileRows = await supa
-          .from('worker_profiles')
+          .from('workers')
           .select('rating, total_reviews, jobs_completed')
-          .eq('id', uid)
+          .eq('auth_user_id', uid)
           .limit(1);
       double rating = 0.0;
       int totalReviews = 0, jobsCompleted = 0;
@@ -581,10 +586,21 @@ class AppState extends ChangeNotifier {
   // Worker-side: list jobs assigned to this worker
   Future<List<Booking>> loadWorkerJobs() async {
     try {
-      final response = await Supabase.instance.client
+      final supa = Supabase.instance.client;
+      final uid = supa.auth.currentUser?.id;
+      if (uid == null) return [];
+      // Resolve auth UID → workers.id (auto-generated UUID)
+      final workerRow = await supa
+          .from('workers')
+          .select('id')
+          .eq('auth_user_id', uid)
+          .maybeSingle();
+      if (workerRow == null) return [];
+      final workerId = workerRow['id'] as String;
+      final response = await supa
           .from('bookings')
           .select()
-          .eq('worker_id', _userId)
+          .eq('worker_id', workerId)
           .order('created_at', ascending: false);
       return (response as List).map((e) => Booking.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {

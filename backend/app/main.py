@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
 from app.config import get_settings
-from app.db.session import create_tables
 from app.events.handlers import register_handlers
 from app.scheduler.reminders import get_scheduler
 
@@ -24,11 +23,19 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    logger.info("Karigar backend starting (demo_mode=%s, time_scale=%dx)", settings.demo_mode, settings.demo_time_scale)
+    logger.info(
+        "Karigar backend starting (demo_mode=%s, time_scale=%dx)",
+        settings.demo_mode,
+        settings.demo_time_scale,
+    )
 
-    # Create DB tables
-    await create_tables()
-    logger.info("Database tables ready")
+    # Seed mock workers into Supabase (idempotent upsert on legacy_id)
+    try:
+        from app.data.seed import seed_workers
+        await seed_workers()
+        logger.info("Worker seed complete")
+    except Exception as exc:
+        logger.warning("Worker seed failed (non-fatal): %s", exc)
 
     # Register conflict event handlers
     register_handlers()
@@ -41,7 +48,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
     scheduler.shutdown(wait=False)
     logger.info("APScheduler stopped")
 
@@ -57,7 +63,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # tighten in production
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

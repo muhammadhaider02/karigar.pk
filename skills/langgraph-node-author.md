@@ -43,9 +43,9 @@ async with emit_trace(
     candidates = await provider_store.search(
         service=state.parsed_intent.service_type,
         lat=geo.lat, lng=geo.lng, radius_km=5,
-        exclude=state.excluded_provider_ids,
+        exclude=state.excluded_worker_ids,
     )
-    trace_ctx.add_tool_call("ProviderStore.search", {"radius_km": 5, "exclude": state.excluded_provider_ids}, {"count": len(candidates)})
+    trace_ctx.add_tool_call("ProviderStore.search", {"radius_km": 5, "exclude": state.excluded_worker_ids}, {"count": len(candidates)})
 
     state.candidates = candidates
     trace_ctx.set_output({"candidate_count": len(candidates)})
@@ -76,25 +76,25 @@ When the Conflict Resolver re-invokes a happy-path node, pass `phase_override="r
 
 - Domain errors (`SlotConflict`, `ProviderNotFound`, `LanguageNotSupported`) are defined in `backend/app/graph/errors.py`. Raise them, don't swallow.
 - The Orchestrator catches them and routes:
-  - `SlotConflict` → publish `slot_conflict` event → Conflict Resolver
-  - `ProviderNotFound` → emit an `act` trace with `output={"empty": true}` and short-circuit to a "no providers" response
+  - `SlotConflict` -> publish `slot_conflict` event -> Conflict Resolver
+  - `ProviderNotFound` -> emit an `act` trace with `output={"empty": true}` and short-circuit to a "no providers" response
 - Network / API errors (`httpx.HTTPError`, `google.api_core.exceptions.*`): retry once with exponential backoff (helper in `app/graph/retry.py`); if still failing, emit a trace event with the error in `output` and re-raise.
 
 ## State mutation rules
 
-`RequestSession` is **append-only** for the trace and `excluded_provider_ids`. Replacing those lists in a node will lose data from earlier nodes, so don't do it.
+`RequestSession` is **append-only** for the trace and `excluded_worker_ids`. Replacing those lists in a node will lose data from earlier nodes, so don't do it.
 
 Allowed mutations per node:
 | Node | Reads | Writes |
 |---|---|---|
 | Intent | `raw_text` | `parsed_intent`, `language` |
 | Planning step | `parsed_intent` | appends one `plan` trace event |
-| Discovery | `parsed_intent`, `excluded_provider_ids` | `candidates` |
+| Discovery | `parsed_intent`, `excluded_worker_ids` | `candidates` |
 | Ranking | `candidates` | `ranked` (list of `(provider, score, reasoning)`) |
 | Decision | `ranked`, `parsed_intent.language` | `chosen` |
 | Booking | `chosen`, `parsed_intent.time_window` | `booking` |
 | Follow-up | `booking` | schedules jobs (no state write) |
-| Conflict | `booking`, `excluded_provider_ids` | appends to `excluded_provider_ids`, increments `resolution_attempts`, sets `triggered_by` for downstream re-runs |
+| Conflict | `booking`, `excluded_worker_ids` | appends to `excluded_worker_ids`, increments `resolution_attempts`, sets `triggered_by` for downstream re-runs |
 
 ## Testing pattern
 

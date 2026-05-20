@@ -58,9 +58,9 @@ class _WorkerHubScreenState extends State<WorkerHubScreen> {
       final uid = Supabase.instance.client.auth.currentUser?.id;
       if (uid != null) {
         await Supabase.instance.client
-            .from('worker_profiles')
+            .from('workers')
             .update({'is_online': _isAvailable})
-            .eq('id', uid);
+            .eq('auth_user_id', uid);
       }
     } catch (e) {
       // Silently keep local state — server can resync next refresh

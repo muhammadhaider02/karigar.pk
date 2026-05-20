@@ -35,8 +35,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
       final rows = await supa
           .from('bookings')
           .select('id, status, service_type, slot_time, created_at, customer_id, worker_id, '
-                  'customer:profiles!bookings_customer_id_fkey(full_name), '
-                  'worker:profiles!bookings_worker_id_fkey(full_name)')
+                  'customer:customers!customer_id(full_name), '
+                  'worker:workers!worker_id(full_name)')
           .or('customer_id.eq.$uid,worker_id.eq.$uid')
           .order('created_at', ascending: false)
           .limit(30);
