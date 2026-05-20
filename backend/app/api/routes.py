@@ -104,29 +104,32 @@ async def health():
 @router.post("/transcribe")
 async def transcribe_audio(req: TranscribeRequest):
     """Transcribe base64-encoded audio to text using Gemini 2.5 Flash multimodal."""
-    settings = get_settings()
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        google_api_key=settings.google_api_key,
-        temperature=0.0,
-    )
-    message = HumanMessage(content=[
-        {
-            "type": "media",
-            "data": req.audio_data,
-            "mime_type": req.mime_type,
-        },
-        {
-            "type": "text",
-            "text": (
-                "Transcribe this audio exactly as spoken. "
-                "The speaker may use Urdu (Nastaliq or Roman script), English, or mix them. "
-                "Return ONLY the transcription — no explanation, no labels."
-            ),
-        },
-    ])
-    response = await llm.ainvoke([message])
-    return {"text": response.content.strip()}
+    try:
+        settings = get_settings()
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=settings.google_api_key,
+            temperature=0.0,
+        )
+        message = HumanMessage(content=[
+            {
+                "type": "media",
+                "data": req.audio_data,
+                "mime_type": req.mime_type,
+            },
+            {
+                "type": "text",
+                "text": (
+                    "Transcribe this audio exactly as spoken. "
+                    "The speaker may use Urdu (Nastaliq or Roman script), English, or mix them. "
+                    "Return ONLY the transcription — no explanation, no labels."
+                ),
+            },
+        ])
+        response = await llm.ainvoke([message])
+        return {"text": response.content.strip()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/sessions", response_model=StartSessionResponse)
