@@ -1,4 +1,4 @@
-name: karigar
+﻿name: karigar
 description: "Karigar AI - Pakistan's Smart Service Marketplace"
 publish_to: 'none'
 version: 1.0.0+1
@@ -31,7 +31,8 @@ dependencies:
   supabase_flutter: ^2.5.0
 
   # ── Voice ───────────────────────────────────────────────────
-  speech_to_text: ^7.0.0
+  record: ^5.2.0
+  path_provider: ^2.1.5
   url_launcher: ^6.3.0
 
 dev_dependencies:

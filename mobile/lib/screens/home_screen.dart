@@ -10,6 +10,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../app/routes.dart';
 import '../providers/app_state.dart';
+import '../services/api_client.dart';
+import '../services/voice.dart';
 import 'all_roles_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,6 +22,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _queryController = TextEditingController();
+  final _voice = VoiceService();
+  final _apiClient = KarigarApiClient();
+  bool _isRecording = false;
+  bool _isTranscribing = false;
   int _selectedNavIndex = 0;
   String _locationLabel = 'Getting location...';
 
@@ -30,6 +36,13 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<AppState>(context, listen: false).loadBookings();
     });
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    _voice.dispose(); // ignore: discarded_futures
+    super.dispose();
   }
 
   Future<void> _fetchLocation() async {
@@ -60,6 +73,35 @@ class _HomeScreenState extends State<HomeScreen> {
     Provider.of<AppState>(context, listen: false)
         .startBookingFlow(_queryController.text);
     Navigator.pushNamed(context, AppRoutes.agentTrace);
+  }
+
+  Future<void> _toggleRecording() async {
+    if (_isRecording) {
+      setState(() { _isRecording = false; _isTranscribing = true; });
+      try {
+        final base64Audio = await _voice.stop();
+        if (base64Audio != null && mounted) {
+          final text = await _apiClient.transcribeAudio(base64Audio);
+          if (mounted) {
+            setState(() {
+              _queryController.text = text;
+              _queryController.selection = TextSelection.fromPosition(
+                TextPosition(offset: text.length),
+              );
+            });
+          }
+        }
+      } catch (_) {
+        // silently fail — user can type manually
+      } finally {
+        if (mounted) setState(() => _isTranscribing = false);
+      }
+    } else {
+      final permitted = await _voice.hasPermission;
+      if (!permitted || !mounted) return;
+      await _voice.start();
+      setState(() => _isRecording = true);
+    }
   }
 
   void _submitServiceQuery(String query) {
@@ -289,7 +331,19 @@ class _HomeScreenState extends State<HomeScreen> {
                             onSubmitted: (_) => _submitQuery(),
                           ),
                         ),
-                        const Icon(Icons.mic_none, color: Color(0xFF111B21), size: 24),
+                        GestureDetector(
+                          onTap: _toggleRecording,
+                          child: _isTranscribing
+                              ? const SizedBox(
+                                  width: 24, height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF075E54)),
+                                )
+                              : Icon(
+                                  _isRecording ? Icons.mic : Icons.mic_none,
+                                  color: _isRecording ? Colors.red : const Color(0xFF111B21),
+                                  size: 24,
+                                ),
+                        ),
                         const SizedBox(width: 12),
                         Container(
                           margin: const EdgeInsets.all(6),

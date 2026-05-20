@@ -17,6 +17,7 @@ GET    /notifier-log                    → mock WhatsApp message log
 GET    /health                          → {"status": "ok"}
 GET    /roles                           → [{id, display_name, worker_count}] all service categories
 GET    /workers?role=                   → [{id, name, rating, area, price_per_visit, phone}]
+POST   /transcribe                      → {text} transcribe base64 audio via Gemini multimodal
 """
 
 from __future__ import annotations
@@ -32,6 +33,10 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from langchain_core.messages import HumanMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+from app.config import get_settings
 from app.events.bus import get_bus
 from app.graph import conflict_resolver, orchestrator
 from app.graph.state import BookingStatus, RequestSession
@@ -74,6 +79,11 @@ class ProviderUnavailableRequest(BaseModel):
     session_id: str
 
 
+class TranscribeRequest(BaseModel):
+    audio_data: str          # base64-encoded audio bytes
+    mime_type: str = "audio/wav"  # audio/wav | audio/mp3 | audio/ogg
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _session_or_404(session_id: str) -> RequestSession:
@@ -89,6 +99,34 @@ def _session_or_404(session_id: str) -> RequestSession:
 @router.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@router.post("/transcribe")
+async def transcribe_audio(req: TranscribeRequest):
+    """Transcribe base64-encoded audio to text using Gemini 2.5 Flash multimodal."""
+    settings = get_settings()
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=settings.google_api_key,
+        temperature=0.0,
+    )
+    message = HumanMessage(content=[
+        {
+            "type": "media",
+            "data": req.audio_data,
+            "mime_type": req.mime_type,
+        },
+        {
+            "type": "text",
+            "text": (
+                "Transcribe this audio exactly as spoken. "
+                "The speaker may use Urdu (Nastaliq or Roman script), English, or mix them. "
+                "Return ONLY the transcription — no explanation, no labels."
+            ),
+        },
+    ])
+    response = await llm.ainvoke([message])
+    return {"text": response.content.strip()}
 
 
 @router.post("/sessions", response_model=StartSessionResponse)

@@ -44,6 +44,18 @@ class KarigarApiClient {
     return data['session_id'] as String;
   }
 
+  Future<String> transcribeAudio(String base64Audio, {String mimeType = 'audio/wav'}) async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/transcribe'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'audio_data': base64Audio, 'mime_type': mimeType}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Transcription failed: ${response.statusCode}');
+    }
+    return json.decode(response.body)['text'] as String;
+  }
+
   // Returns a stream of {event: 'trace'|'done'|'ping', data: decoded_json}
   // Uses polling on both web and native — SSE buffering is unreliable on
   // Flutter web (XHR) and android HTTP stacks. Polling is dead simple.
