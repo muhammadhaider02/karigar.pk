@@ -68,7 +68,7 @@ flutter pub get
 flutter run                                  # picks the first connected device
 ```
 
-The Flutter app expects the backend at `http://10.0.2.2:8000` on Android emulator (host machine's loopback). Override with `--dart-define=API_BASE_URL=...` when running on a real device.
+The Flutter app defaults to `https://karigar-pk.onrender.com` (the deployed backend). For local development, override with `--dart-define=API_BASE_URL=http://10.0.2.2:8000` (Android emulator) or `--dart-define=API_BASE_URL=http://127.0.0.1:8000` (web).
 
 ### Run all tests
 

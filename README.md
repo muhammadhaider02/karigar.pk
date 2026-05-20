@@ -64,6 +64,7 @@ Karigar understands. Plans. Searches. Ranks. Decides. Books. Follows up. And if 
 | **Database** | Supabase Postgres, supabase-py | Workers, bookings, agent traces and conflict events |
 | **Scheduler** | APScheduler | Reminders, no-show watchdogs and completion checks |
 | **Search** | Antigravity Browser subagent | Runtime reputation enrichment via web search |
+| **Backend (deployed)** | Render | `https://karigar-pk.onrender.com` — free tier, spins down after 15 min idle |
 
 ---
 
@@ -106,10 +107,13 @@ curl http://127.0.0.1:8000/health    # {"status": "ok"}
 cd mobile
 flutter pub get
 
-# Android emulator (backend must be running)
+# Production — defaults to https://karigar-pk.onrender.com (no flag needed)
+flutter run
+
+# Local dev — Android emulator
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 
-# Web
+# Local dev — Web
 flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000
 ```
 

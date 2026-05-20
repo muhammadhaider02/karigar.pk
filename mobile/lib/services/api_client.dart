@@ -6,10 +6,12 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'sse_stub.dart' if (dart.library.html) 'sse_web.dart' as sse;
 
 class KarigarApiClient {
+  static const String _envUrl = String.fromEnvironment('API_BASE_URL');
+
   static String get baseUrl {
+    if (_envUrl.isNotEmpty) return _envUrl;
     if (kIsWeb) return 'http://127.0.0.1:8000';
-    // Physical Pixel 8 Pro on same WiFi as PC
-    return 'http://192.168.1.12:8000';
+    return 'https://karigar-pk.onrender.com';
   }
 
   final http.Client _client = http.Client();
