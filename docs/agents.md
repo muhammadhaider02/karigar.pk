@@ -51,7 +51,7 @@ All agents share:
 
 ## 3. `flutter-engineer`
 
-**Purpose**: Owns the mobile app. Implements onboarding, WhatsApp-style chat, live agent-trace timeline, provider cards, faux-WhatsApp confirmation, bookings list and local notifications.
+**Purpose**: Owns the mobile app. Implements onboarding, voice input, WhatsApp-style chat, live agent-trace timeline, provider cards, faux-WhatsApp confirmation, bookings list, emergency screen, all-services grid, worker hub, review/dispute system and local notifications.
 
 - **Model**: Gemini 2.5 Pro for the trace timeline + WhatsApp-style chat; Gemini 2.5 Flash for screens that are mostly layout
 - **Mode**: Planning for screen-level work; Fast for widget tweaks
@@ -60,7 +60,7 @@ All agents share:
 - **Skills auto-loaded**:
   - [`skills/flutter-trace-ui.md`](../skills/flutter-trace-ui.md): when touching `screens/trace.dart`, `widgets/agent_step_card.dart` or any trace-rendering widget
 - **Dependencies**: `backend-engineer` (HTTP/SSE contract)
-- **Hand-off**: a runnable Flutter app + APK for the demo and an optional `flutter build web` artifact
+- **Hand-off**: a runnable Flutter app + APK for the demo and the `flutter build web` artifact deployed to Vercel
 
 ## 4. `qa-engineer`
 

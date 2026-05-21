@@ -1,4 +1,4 @@
-# Karigar: Detailed README
+# Karigar-PK: Detailed README
 
 > This is the **hackathon-deliverable README**. It contains the four sections the brief specifically requires: system architecture, how Antigravity is used, APIs/tools used and assumptions/limitations. For the project landing page, see [`/README.md`](../README.md).
 
@@ -37,7 +37,7 @@ cp .env.example .env
 
 ```bash
 cd backend
-uv sync                                      # install deps from pyproject.toml + uv.lock
+uv sync                                      
 uv run python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -65,10 +65,10 @@ curl http://localhost:8000/sessions/<session_id>/stream
 ```bash
 cd mobile
 flutter pub get
-flutter run                                  # picks the first connected device
+flutter run                               
 ```
 
-The Flutter app defaults to `https://karigar-pk.onrender.com` (the deployed backend). For local development, override with `--dart-define=API_BASE_URL=http://10.0.2.2:8000` (Android emulator) or `--dart-define=API_BASE_URL=http://127.0.0.1:8000` (web).
+The Flutter app defaults to `https://karigar-pk.onrender.com` (the deployed backend). A live web build is available at `https://karigar-pk.vercel.app/`. For local development, override with `--dart-define=API_BASE_URL=http://10.0.2.2:8000` (Android emulator) or `--dart-define=API_BASE_URL=http://127.0.0.1:8000` (web).
 
 ### Run all tests
 
@@ -118,7 +118,7 @@ flowchart TB
     Conflict -->|"SSE"| TraceUI
 ```
 
-For the full architecture deep-dive (state contracts, tool protocols, event-bus internals and swap-to-real-APIs guide), see [`architecture.md`](architecture.md).
+For the full architecture deep-dive (state contracts, tool protocols, event-bus internals and swap-to-real-APIs guide), see [`architecture.md`](architecture.md). The complete project specification (agents, tools, timeline and scoring map) is in [`plan.md`](plan.md). The Supabase schema reference (all tables, enums, RLS policies and storage buckets) is in [`supabase.md`](supabase.md).
 
 ### The 7 agents at a glance
 
@@ -177,29 +177,52 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 - The backend's **`Search` tool** (`backend/app/tools/search.py`) is a thin wrapper that invokes Antigravity's **Browser subagent** at runtime. The DiscoveryAgent calls it to enrich high-uncertainty candidates with reputation snippets and verify business hours: exactly the brief's "tools integration (Maps, Search, APIs)" requirement.
 - The deployed agent graph mirrors Antigravity's Mission Control metaphor: each LangGraph step renders as a "trace card" in the Flutter app, complete with phase badges, named tool-call chips and latency indicators.
 
-### Layer 3: Deliverables produced by Antigravity
-
-- The 3 to 5 min **demo video** is recorded through Antigravity's Browser subagent, so the deliverable itself is an Antigravity Artifact.
-- The **agent trace** export (`GET /sessions/{id}/trace.md`) is published alongside Antigravity's own Walkthrough and Implementation Plan artifacts as the "Agent Trace / Logs" submission.
-
 ---
 
 ## 4. APIs and tools used
 
 ### LLM
-- **Google Gemini 2.5 Flash**: all nodes (IntentAgent, DecisionAgent, ConflictResolverAgent, Search summarisation)
+- **Google Gemini 2.5 Flash**: all nodes (IntentAgent, DecisionAgent, ConflictResolverAgent, Search summarisation) and audio transcription (`POST /transcribe` multimodal endpoint)
 - Accessed via `langchain-google-genai` with structured output (Pydantic schema)
 - **`DEMO_MODE=true`** activates a cache in `backend/app/graph/demo_cache.py` that returns
   deterministic responses for the 5 canonical demo prompts (Intent + Decision + Conflict)
   without burning Gemini quota. Unknown prompts still fall through to the live API.
 
 ### Agent orchestration
-- **LangGraph 1.x**: state machine, conditional routing, subgraph re-invocation
+- **LangGraph 1.2.0**: state machine, conditional routing, subgraph re-invocation
 - **Google Antigravity Browser subagent**: runtime Search tool + demo recorder
 
 ### Maps and geocoding
 - **Mock** (default, no API key needed): hand-coded Islamabad sector lookup + haversine distance
 - **Real (drop-in)**: Google Maps Platform: Geocoding API and Distance Matrix API. Activated by setting `GOOGLE_MAPS_KEY` in `.env`.
+
+### Mock vs real
+
+| Component | Mock (default) | Real (drop-in) |
+|:---|:---|:---|
+| Geocoder | Islamabad sector lookup table | Google Geocoding API (`GOOGLE_MAPS_KEY`) |
+| Distance | Haversine formula | Google Distance Matrix API (`GOOGLE_MAPS_KEY`) |
+| Provider store | 75 synthetic workers in Supabase | Same table, replace seed data with real businesses |
+| Notifier | Faux-WhatsApp screen in-app, JSONL log | WhatsApp Business API (swap `MockNotifier`) |
+| Search | Antigravity Browser subagent / Gemini grounded search | Already real |
+| LLM | Gemini 2.5 Flash (real, with DEMO_MODE cache) | Already real |
+| Auth | Firebase Auth (real) | Already real |
+| Database | Supabase Postgres (real) | Already real |
+| Voice | Gemini 2.5 Flash multimodal (real) | Already real |
+
+### Integrations
+
+| Service | Purpose | How integrated |
+|:---|:---|:---|
+| Google Gemini 2.5 Flash | Intent parsing, decision justification, conflict resolution, audio transcription | `langchain-google-genai` structured output |
+| Supabase Postgres | Workers, bookings, agent traces, conflict events, sessions | `supabase-py` async client (service role) |
+| Supabase Storage | Receipt PNGs, profile photos, CNIC documents | Public/signed URL uploads |
+| Firebase Auth | User signup/login (email + phone OTP) | `firebase_auth` Flutter SDK |
+| Google Maps Platform | Geocoding + Distance Matrix (optional) | `GOOGLE_MAPS_KEY` env var activates real impl |
+| Antigravity Browser | Runtime web search for provider reputation | `backend/app/tools/search.py` wrapper |
+| APScheduler | Reminder, no-show watchdog, completion jobs | In-process async scheduler |
+| Render | Backend deployment | Auto-deploy from main branch |
+| Vercel | Web app deployment | `flutter build web` output |
 
 ### Backend
 - **FastAPI**: HTTP/SSE server
@@ -209,7 +232,7 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 - **Pydantic v2**: typed state objects and LLM structured outputs
 
 ### Mobile
-- **Flutter 3.38+** with `provider` (state management), `http` (API client), `google_maps_flutter` + `flutter_map` (mapping), `firebase_auth` + `firebase_messaging` (auth and push notifications), `geolocator` + `permission_handler` (location), `image_picker` (worker profile photos), `flutter_animate` + `google_fonts` (UI) and a custom SSE client (`sse_stub.dart` / `sse_web.dart`) for live trace streaming
+- **Flutter 3.38+** with `provider` (state management), `http` (API client), `google_maps_flutter` + `flutter_map` (mapping), `firebase_auth` + `firebase_messaging` (auth and push notifications), `geolocator` + `permission_handler` (location), `image_picker` (worker profile photos), `record` + `path_provider` (voice input), `flutter_animate` + `google_fonts` (UI) and a custom SSE client (`sse_stub.dart` / `sse_web.dart`) for live trace streaming
 
 ### Dev tooling
 - **uv**: Python project + virtualenv + lockfile management
@@ -220,19 +243,19 @@ This is what makes Antigravity *central to system logic*, not just a code editor
 
 ## 5. Assumptions and limitations
 
-- **Provider data is fully synthetic**: 25 mock providers across Islamabad. No real businesses are listed.
+- **Provider data is fully synthetic**: 75 mock providers across 12 service categories in Islamabad. No real businesses are listed.
 - **All phone numbers and addresses are placeholders**: numbers follow the realistic Pakistani
   `03XX-XXXXXXX` shape but are randomly generated with a fixed seed (any resemblance to
   real numbers is incidental). Addresses are sector-level only. PII-free per brief
   requirement: *"Avoid use of real personal/sensitive data."*
 - **WhatsApp confirmations are simulated** inside the app on a faux-WhatsApp screen. No real WhatsApp Business API integration.
 - **Follow-up timing is compressed** via the `DEMO_TIME_SCALE` env var for live demonstration. In production, `DEMO_TIME_SCALE=1` for real-time scheduling.
-- **Urdu speech-to-text accuracy** depends on device locale. We ship text input as the primary input method and voice as a bonus.
+- **Voice transcription** uses Gemini 2.5 Flash multimodal (not device STT). Audio is recorded as 16 kHz mono WAV, base64-encoded and sent to the backend `/transcribe` endpoint. Gemini handles Urdu, Roman Urdu, English and code-switched speech natively. Text input remains the primary method; voice is a supplementary option.
 - **No payments handled**: bookings include a price estimate only.
 - **Conflict resolution is capped at 3 auto-rebook attempts** before handing off to the user with the top-3 alternatives. This prevents infinite loops on correlated failures.
 - **Google Maps APIs are optional**: the system fully functions on mock data without any API key. Real APIs are a drop-in via env var, demonstrating clean architecture (rubric criterion 5).
 - **Gemini API quota** during the demo is mitigated via a `DEMO_MODE` cache (see
   `backend/app/graph/demo_cache.py`) that returns deterministic responses for the 5
   canonical demo prompts; unknown prompts still fall through to the live LLM.
-- **Authentication is Firebase Phone OTP**: the app uses `firebase_auth` with phone-number verification. Firebase Console registration of the Android/iOS app IDs is required for Auth to work on a physical device; the emulator works without it.
+- **Authentication** uses Firebase Auth (email/password and phone OTP via `firebase_auth`) with Supabase for data persistence. Firebase Console registration of the Android/iOS app IDs is required for Auth to work on a physical device; the emulator works without it.
 - **Single-region**: sector lookup tables are Islamabad-only. Extending to Lahore, Karachi etc. is purely a data exercise.

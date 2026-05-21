@@ -52,7 +52,7 @@ Registered app users who book services. Auto-created by auth trigger on signup.
 ---
 
 ### `workers`
-All workers — both 25 mock seed workers (from providers.json) and real registered users.
+All workers -- both 75 mock seed workers (from providers.json) and real registered users.
 Differentiated by `is_seed_data`. Remove mock workers later: `DELETE FROM workers WHERE is_seed_data = true`.
 
 | Column | Type | Notes |
@@ -175,7 +175,7 @@ Core transaction table. Written by both backend (AI flow) and Flutter (direct bo
 | `raw_input` | TEXT | Original customer query |
 | `description` | TEXT | Provider name (stored for notifications) |
 | `urgency` | urgency_level | |
-| `job_address/district/area/lat/lng` | — | Job location |
+| `job_address/district/area/lat/lng` | mixed | Job location |
 | `slot_time` | TIMESTAMPTZ | Scheduled start |
 | `slot_end` | TIMESTAMPTZ | Auto-set to `slot_time + 2h` by trigger |
 | `price_estimate` | INT | PKR, locked at booking time |
@@ -188,7 +188,7 @@ Core transaction table. Written by both backend (AI flow) and Flutter (direct bo
 | `receipt_url` | TEXT | Supabase Storage public URL |
 | `confirmed_at/arrived_at/completed_at/cancelled_at` | TIMESTAMPTZ | Lifecycle timestamps |
 
-**Key constraint**: `UNIQUE(worker_id, slot_time)` partial index excludes `cancelled`/`no_show` rows — freed slots are re-bookable.
+**Key constraint**: `UNIQUE(worker_id, slot_time)` partial index excludes `cancelled`/`no_show` rows. Freed slots are re-bookable.
 
 **Trigger**: `fill_slot_end` auto-sets `slot_end = slot_time + 2 hours` when omitted.
 
@@ -302,3 +302,7 @@ Role is stored in `auth.users.user_metadata` at signup:
 | WorkerAreaScreen | `worker_service_areas` |
 | WorkerHubScreen | `workers`, `bookings` |
 | WorkerJobRequestScreen | `bookings` |
+| EmergencyScreen | (none, local emergency numbers) |
+| AllServicesScreen | in-memory categories |
+| AllRolesScreen | `workers` (via `/roles` RPC) |
+| WorkersByRoleScreen | `workers` (via `/workers?role=`) |

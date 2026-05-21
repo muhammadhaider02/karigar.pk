@@ -92,7 +92,7 @@ purposes. The split is deliberate and load-bearing:
 
 | Path | Purpose | Versioned? | Touched by |
 |---|---|---|---|
-| `backend/app/data/` | **Source data** that ships with the app: `providers.json` (the 25 seed providers), `seed.py` (the seeder script). Importable as a Python package. | YES | Edited by devs; read by `JsonProviderStore` and `seed.py` |
+| `backend/app/data/` | **Source data** that ships with the app: `providers.json` (75 seed providers across 12 service categories), `seed.py` (the seeder script). Importable as a Python package. | YES | Edited by devs; read by `JsonProviderStore` and `seed.py` |
 | `backend/runtime/` | **Runtime output** generated at boot/runtime: `notifier-log.jsonl` (mock WhatsApp messages), `seed-report.md`, `traces/*.md` (e2e exports). | **NO** (gitignored in `.gitignore`) | Written by the backend at runtime; safe to delete |
 
 `backend/runtime/` is wiped by the `/seed-mock` workflow and is regenerated
@@ -266,6 +266,8 @@ The critical constraint: `UNIQUE(worker_id, slot_start)` on `bookings` (implemen
 | `GET` | `/notifier-log` | - | Mock WhatsApp message log (for the faux-WhatsApp screen) |
 | `GET` | `/roles` | - | All service categories with display names and live worker counts |
 | `GET` | `/workers?role=` | - | Workers for a given role ordered by rating desc |
+| `POST` | `/transcribe` | `{audio_data, mime_type}` | `{text}` (Gemini multimodal audio transcription) |
+| `GET` | `/health` | - | `{status: "ok"}` |
 
 Receipts are served directly from Supabase Storage via their public URL stored in `bookings.receipt_url`.
 

@@ -15,9 +15,9 @@
 
 > **Karigar** (کاریگر): Urdu for *artisan / craftsman*.
 
-An agentic AI system that automates the full lifecycle of a service request, from natural-language intent (Urdu / Roman Urdu / English) to provider matching, simulated booking, follow-up and autonomous recovery from real-world failures like no-shows and double-bookings.
+An agentic AI system that automates the full lifecycle of a service request, from natural-language or voice intent (Urdu / Roman Urdu / English) to provider matching, booking, follow-up and autonomous recovery from real-world failures like no-shows and double-bookings. The Flutter app ships 24 screens across customer and worker flows with live agent-trace streaming, GPS tracking, emergency services and a review/dispute system.
 
-[Project Plan](docs/plan.md) · [Architecture](docs/architecture.md) · [Detailed Docs](docs/README.md) · [Getting Started](#getting-started)
+[Live Demo](https://karigar-pk.vercel.app/) · [Project Plan](docs/plan.md) · [Architecture](docs/architecture.md) · [Detailed Docs](docs/README.md) · [Getting Started](#getting-started)
 
 </div>
 
@@ -29,7 +29,7 @@ An agentic AI system that automates the full lifecycle of a service request, fro
 
 Karigar understands. Plans. Searches. Ranks. Decides. Books. Follows up. And if Ali AC Services doesn't show up, it autonomously rebooks Hassan Cooling Experts and tells you in your own language.
 
-1. **Send a message** - Natural language in Urdu, Roman Urdu or English
+1. **Send a message or speak** - Text or voice input in Urdu, Roman Urdu or English
 2. **Intent is parsed** - The IntentAgent extracts service type, location, time window and urgency
 3. **Providers are discovered** - The DiscoveryAgent geocodes the location and finds nearby providers
 4. **Candidates are ranked** - The RankingAgent scores by proximity, rating, availability and price
@@ -59,12 +59,14 @@ Karigar understands. Plans. Searches. Ranks. Decides. Books. Follows up. And if 
 | Component | Stack | Description |
 |:---|:---|:---|
 | **Backend** | Python 3.11, FastAPI, LangGraph, Pydantic v2 | 7-agent state machine with SSE streaming and event bus |
-| **Mobile** | Flutter 3.38+, Provider, http | WhatsApp-style chat, live agent-trace timeline, booking management |
-| **LLM** | Gemini 2.5 Flash (Google AI Studio) | Intent parsing, decision justification, conflict resolution |
+| **Mobile** | Flutter 3.38+, Provider, http | 24 screens: voice input, live trace timeline, GPS tracking, booking management, worker hub |
+| **LLM** | Gemini 2.5 Flash (Google AI Studio) | Intent parsing, decision justification, conflict resolution, audio transcription |
+| **Voice** | Gemini 2.5 Flash multimodal | Urdu/English audio transcription via POST /transcribe |
 | **Database** | Supabase Postgres, supabase-py | Workers, bookings, agent traces and conflict events |
 | **Scheduler** | APScheduler | Reminders, no-show watchdogs and completion checks |
 | **Search** | Antigravity Browser subagent | Runtime reputation enrichment via web search |
-| **Backend (deployed)** | Render | `https://karigar-pk.onrender.com` — free tier, spins down after 15 min idle |
+| **Backend (live)** | Render | `https://karigar-pk.onrender.com` |
+| **Web App (live)** | Vercel | `https://karigar-pk.vercel.app/` |
 
 ---
 
@@ -107,14 +109,17 @@ curl http://127.0.0.1:8000/health    # {"status": "ok"}
 cd mobile
 flutter pub get
 
-# Production — defaults to https://karigar-pk.onrender.com
+# Production (defaults to https://karigar-pk.onrender.com)
 flutter run
 
-# Local dev — Android emulator
+# Local dev, Android emulator
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 
-# Local dev — Web
+# Local dev, Web
 flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000
+
+# Production web build (deployed at https://karigar-pk.vercel.app/)
+flutter build web
 ```
 
 **Run tests:**

@@ -130,7 +130,7 @@ Every node calls `trace.append(...)` with this shape, which explicitly separates
 
 ## 4. Tech stack
 
-- **Mobile**: Flutter 3.38+, Dart 3.10+: `provider` (state), `http` (API client), `google_maps_flutter` + `flutter_map` (mapping), `firebase_auth` + `firebase_messaging` (auth + push), `geolocator`, `image_picker`, `flutter_animate`, `google_fonts`, custom SSE client (`sse_stub.dart` / `sse_web.dart`).
+- **Mobile**: Flutter 3.38+, Dart 3.10+: `provider` (state), `http` (API client), `google_maps_flutter` + `flutter_map` (mapping), `firebase_auth` + `firebase_messaging` (auth + push), `geolocator`, `image_picker`, `record` + `path_provider` (voice input), `flutter_animate`, `google_fonts`, custom SSE client (`sse_stub.dart` / `sse_web.dart`).
 - **Backend**: Python 3.11 (managed by `uv`), FastAPI, LangGraph, `langchain-google-genai`, Pydantic v2, supabase-py, APScheduler and `sse-starlette`.
 - **Database**: Supabase Postgres (bookings, agent_traces, workers, customers, conflict_events tables). Accessed via supabase-py with the service-role key.
 - **LLM**: Gemini 2.5 Flash (all nodes).
@@ -183,14 +183,15 @@ Every node calls `trace.append(...)` with this shape, which explicitly separates
       notifier.py
       search.py           # Antigravity Browser subagent wrapper
     data/                 # SOURCE data (versioned, immutable, importable)
-      providers.json      # 25 PII-safe mock providers
+      providers.json      # 75 PII-safe mock providers across 12 service categories
       seed.py
     db/
       supabase_client.py  # async Supabase client singleton
     api/
       routes.py           # POST /sessions, GET /sessions/{id}/stream,
-                          # POST /bookings/{id}/cancel,
-                          # POST /providers/{id}/unavailable
+                          # POST /bookings/{id}/cancel, POST /transcribe,
+                          # POST /providers/{id}/unavailable,
+                          # GET /roles, GET /workers, GET /health
     scheduler/
       reminders.py
   runtime/                # RUNTIME output (gitignored, regenerated)
@@ -234,15 +235,24 @@ Every node calls `trace.append(...)` with this shape, which explicitly separates
       worker_profile_setup_screen.dart
       worker_skill_selection_screen.dart
       all_roles_screen.dart
+      all_services_screen.dart
       workers_by_role_screen.dart
+      emergency_screen.dart
     services/
       api_client.dart
+      voice.dart
+      notifications.dart
+      sse_client.dart
       sse_stub.dart
       sse_web.dart
     widgets/
+      agent_loader_overlay.dart
+      agent_step_card.dart
       animated_background.dart
       karigar_logo.dart
       karigar_screen_header.dart
+      provider_card.dart
+      language_badge.dart
   android/
   ios/
   assets/images/
@@ -295,7 +305,7 @@ Highlighted in the README to score on rubric criterion 5 (Technical Implementati
 
 ## 8. Multilingual handling
 
-Gemini 2.5 understands Urdu and Roman Urdu natively, so no separate translation step is needed. The IntentAgent prompt includes 9 few-shot examples (3 per language). The DecisionAgent and ConflictResolverAgent are instructed to respond in `state.parsed_intent.language` so a Roman Urdu request gets a Roman Urdu confirmation. Voice input uses `speech_to_text` with `ur-PK` locale toggle.
+Gemini 2.5 understands Urdu and Roman Urdu natively, so no separate translation step is needed. The IntentAgent prompt includes 9 few-shot examples (3 per language). The DecisionAgent and ConflictResolverAgent are instructed to respond in `state.parsed_intent.language` so a Roman Urdu request gets a Roman Urdu confirmation. Voice input uses Gemini 2.5 Flash multimodal via the `POST /transcribe` endpoint. Audio is recorded as 16 kHz mono WAV using the `record` package, base64-encoded and sent to the backend. Gemini transcribes Urdu, Roman Urdu and English natively, including code-switched speech.
 
 ## 9. Booking simulation (15% of the score)
 
@@ -353,7 +363,7 @@ Five scenarios are wired end-to-end, all observable in the live trace:
 - **Day 3b (afternoon): Flutter mobile app**: onboarding, WhatsApp-style chat input (text + mic), live trace view consuming SSE with tool-call chips + phase badges, provider card, faux-WhatsApp confirmation, bookings list with cancel button, local notifications and hidden "Provider" tab to fire `unavailable` webhook for demo.
 - **Day 4: Polish + demo + bonuses**:
   - **Required**: UI polish, optional Google Maps key swap-in to prove the interface works, record 3 to 5 min demo using the Antigravity Browser subagent (so the deliverable is an Antigravity Artifact including the auto-rebook moment), finalise README + ARCHITECTURE and export agent trace artifacts.
-  - **Bonus (skip if behind)**: `flutter build web` + deploy to Firebase Hosting / Vercel.
+  - **Bonus (done)**: `flutter build web` deployed to Vercel at `https://karigar-pk.vercel.app/`.
 
 ## 12. Scoring map
 
